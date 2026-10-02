@@ -1,0 +1,122 @@
+:root { color-scheme: light; font: 14px system-ui, sans-serif; color: #242b30; background: #f4f6f7; accent-color: #137568; }
+* { box-sizing: border-box; letter-spacing: 0; }
+/* Extension popups measure body width before expanding their initial viewport. */
+html { width: 760px; min-width: 760px; max-width: 760px; overflow-x: hidden; }
+body { width: 760px; min-width: 760px; max-width: 760px; margin: 0; min-height: 460px; max-height: 600px; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; }
+main { padding: 0 24px 24px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0; }
+.brand { display: flex; align-items: center; gap: 13px; }
+.brand img { width: 44px; height: 44px; }
+h1, h2, p { margin-top: 0; }
+h1 { font-size: 25px; line-height: 1.2; margin-bottom: 2px; }
+h2 { font-size: 17px; margin-bottom: 0; overflow-wrap: anywhere; }
+.brandName { margin: 0; font-size: 13px; color: #687276; }
+.eyebrow { font-size: 10px; color: #687276; margin-bottom: 5px; font-weight: 650; }
+.pill { flex-shrink: 0; border-radius: 4px; padding: 5px 8px; font-size: 11px; font-weight: 650; }
+.pill.idle, .pill.downloading { background: #edf1f3; color: #526168; }
+.pill.ready { background: #e1f3ec; color: #126249; }
+.pill.password-needed { background: #fff2ce; color: #806018; }
+.pill.error { background: #fde9e8; color: #a13e38; }
+.viewTabs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 5px; border: 1px solid #dce3e4; border-radius: 8px; background: #e8edef; }
+.viewTab { border-radius: 5px; color: #657174; background: transparent; padding: 12px; font-size: 14px; }
+.viewTab:hover { color: #137568; background: #f2f8f6; }
+.viewTab.active { color: #137568; background: #fff; box-shadow: 0 1px 4px #203e3214; }
+.featureView { margin: 18px -24px -24px; padding: 0 24px 24px; background: #fff; border-top: 1px solid #e2e7e9; }
+.card { padding: 22px 0; border-bottom: 1px solid #e6ebec; }
+#summary { margin-top: 20px; padding: 18px; border: 1px solid #dce7e3; border-left: 4px solid #137568; border-radius: 6px; background: #f0f7f4; }
+#message { margin: 0; line-height: 1.5; }
+.sectionTitle, footer, .passwordRow, .providerRowHeader, .providerActions, .assistantToolbar, .rowActions, .modelInputRow { display: flex; align-items: center; gap: 8px; }
+.sectionTitle, footer, .providerRowHeader { justify-content: space-between; }
+.sectionTitle > div { min-width: 0; }
+dl { margin: 10px 0 0; }
+dl div { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 12px; padding-top: 6px; }
+dt { color: #687276; font-size: 11px; }
+dd { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+button, .fileButton { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 9px 14px; border: 1px solid transparent; border-radius: 6px; background: #137568; color: #fff; font: 600 13px system-ui, sans-serif; cursor: pointer; }
+button:hover, .fileButton:hover { background: #0b6055; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.secondary { background: #fff; border-color: #d4dcde; color: #404e53; }
+.secondary:hover { background: #f0f4f4; }
+.dangerButton { color: #a13e38; border-color: #edcecb; background: #fff; }
+.dangerButton:hover { background: #fde9e8; }
+input:not([type="checkbox"]):not([type="file"]), select { min-width: 0; padding: 8px 9px; border: 1px solid #cdd7d9; border-radius: 4px; color: #242b30; background: #fff; font: inherit; }
+button:focus-visible, .fileButton:focus-within, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #137568; outline-offset: 2px; }
+.passwordRow input { flex: 1; }
+.hint, .mutedText, .settingRow small, .shortcutSetting small { color: #687276; font-size: 12px; font-weight: 400; line-height: 1.5; }
+.hint { margin: 8px 0 0; }
+.settingRow { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 16px 0; margin: 0; border-bottom: 1px solid #edf0f0; }
+.settingRow:last-child { padding-bottom: 0; border-bottom: 0; }
+.settingRow > span:first-child { display: grid; gap: 3px; min-width: 0; }
+.settingRow strong { font-size: 14px; }
+input[type="checkbox"] { width: 17px; height: 17px; flex-shrink: 0; cursor: pointer; }
+.settingRow select { width: 150px; flex-shrink: 0; font-size: 13px; }
+.scaleControl { display: grid; justify-items: end; flex-shrink: 0; }
+.scaleInput { display: flex; align-items: center; gap: 5px; }
+.scaleInput input { width: 70px; text-align: right; }
+.settingStatus { min-height: 16px; }
+.demoMessage { font-size: 12px; line-height: 1.5; margin: 12px 0; color: #526168; }
+.actions { display: flex; gap: 6px; }
+pre { font: 11px/1.6 ui-monospace, Consolas, monospace; color: #36474a; background: #f3f6f6; overflow: auto; user-select: text; }
+#xml { max-height: 240px; padding: 12px; border: 1px solid #dce3e4; border-radius: 4px; margin-bottom: 0; }
+footer { margin-top: 16px; flex-wrap: wrap; }
+.fileButton { margin: 0; }
+.fileButton input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.compactToggle, .checkboxField { display: flex; align-items: center; gap: 6px; margin: 0; }
+.shortcutSetting { padding-top: 0; margin-top: 0; border-top: 1px solid #e6ebec; }
+.shortcutSetting label { display: grid; gap: 3px; }
+.shortcutInputRow { display: flex; gap: 8px; margin-bottom: 5px; }
+.shortcutInputRow input { flex: 1; width: 0; }
+.providerList { display: grid; gap: 14px; margin-top: 16px; }
+.providerRow { border: 1px solid #dce3e4; border-radius: 8px; padding: 0; background: #f8fafb; overflow: hidden; }
+.providerRowHeader { margin: 0; padding: 12px 16px; background: #eef3f4; }
+.providerRowHeader > strong { font-size: 14px; overflow-wrap: anywhere; }
+.rowActions { flex-shrink: 0; gap: 4px; }
+.iconButton { min-height: 28px; padding: 4px 7px; }
+.providerGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+.providerField { display: grid; gap: 5px; margin: 0; min-width: 0; }
+.providerField > span { color: #526168; font-size: 12px; }
+.providerField input, .providerField select { width: 100%; }
+.providerEnabled { align-self: end; min-height: 34px; }
+.modelInputRow input { flex: 1; width: 0; }
+.smallButton { flex-shrink: 0; padding: 8px 10px; font-size: 12px; }
+.providerStatus { display: block; min-height: 15px; margin-top: 6px; color: #687276; font-size: 11px; overflow-wrap: anywhere; }
+.providerActions { margin-top: 12px; }
+.emptyProviders { margin: 0; padding: 14px; border: 1px dashed #cdd7d9; border-radius: 4px; color: #687276; text-align: center; }
+.assistantToolbar { flex-wrap: wrap; margin-top: 12px; }
+.assistantStatus { margin: 12px 0 0; padding: 12px; border-left: 3px solid #d7bc63; background: #fbf8ee; line-height: 1.5; font-size: 13px; }
+details { margin-top: 10px; border-top: 1px solid #e6ebec; }
+summary { padding: 12px 0; cursor: pointer; font-size: 13px; font-weight: 600; }
+details pre { max-height: 190px; margin: 0; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+code { font: 11px ui-monospace, monospace; }
+[hidden] { display: none !important; }
+.fileToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 22px; }
+.providerEditor { margin: 0; border-top: 1px solid #dce3e4; }
+.providerEditor > summary { padding: 11px 16px; color: #526168; overflow-wrap: anywhere; }
+.providerEditor[open] > summary { border-bottom: 1px solid #e2e7e9; }
+.providerEditor .providerGrid { padding: 16px 16px 0; }
+.providerEditor > .providerStatus { margin: 0; padding: 0 16px 12px; }
+.modelField { grid-column: 1 / -1; }
+.providerField input, .providerField select { min-height: 38px; }
+.providerStatus { min-height: 0; }
+.modelField .providerStatus { font-weight: 400; }
+.settingRow > input[type="checkbox"], .compactToggle input[type="checkbox"] {
+  appearance: none; width: 38px; height: 22px; border: 1px solid #bfc9cd;
+  border-radius: 11px; background: #dbe2e5; position: relative; margin: 0;
+}
+.settingRow > input[type="checkbox"]::before, .compactToggle input[type="checkbox"]::before {
+  content: ""; position: absolute; width: 16px; height: 16px; top: 2px; left: 2px;
+  background: #fff; border-radius: 50%; box-shadow: 0 1px 3px #0002; transition: transform 120ms;
+}
+.settingRow > input[type="checkbox"]:checked, .compactToggle input[type="checkbox"]:checked { background: #137568; border-color: #137568; }
+.settingRow > input[type="checkbox"]:checked::before, .compactToggle input[type="checkbox"]:checked::before { transform: translateX(16px); }
+.compactToggle input:disabled { opacity: 0.5; }
+.assistantToolbar { margin-top: 18px; }
+.assistantToolbar #assistantRun { min-width: 160px; }
+@media (max-width: 440px) {
+  main { padding-right: 14px; padding-left: 14px; }
+  .featureView { margin-right: -14px; margin-left: -14px; padding-right: 14px; padding-left: 14px; }
+  .providerGrid { grid-template-columns: 1fr; }
+  .settingRow { gap: 10px; }
+  .sectionTitle { flex-wrap: wrap; }
+}

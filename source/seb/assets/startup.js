@@ -1,0 +1,95 @@
+const sebBuild = "3.10.1.864";
+const sebVersion = `${sebBuild.split(".").slice(0, 3).join(".")} (x64)`;
+const smallSplash = document.getElementById("smallSplash");
+const bigSplash = document.getElementById("bigSplash");
+const smallFill = smallSplash.querySelector(".fill");
+const smallBarText = smallSplash.querySelector(".bar-text");
+const smallInfo = smallSplash.querySelector(".info-section");
+const bigFill = bigSplash.querySelector(".fill");
+const bigBarText = bigSplash.querySelector(".bar-text");
+
+smallSplash.querySelector(".version-num").textContent = `Version ${sebVersion}`;
+bigSplash.querySelector(".version-num").textContent = `Version ${sebVersion}`;
+bigSplash.querySelector(".build-num").textContent = `Build ${sebBuild}`;
+
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function setProgress(fill, textElement, value, text = "") {
+  fill.classList.remove("indeterminate");
+  fill.style.width = `${value}%`;
+  textElement.textContent = text;
+}
+
+function setBigIndeterminate(duration = 4000) {
+  bigFill.style.setProperty("--slide-duration", `${duration}ms`);
+  bigFill.classList.add("indeterminate");
+}
+
+async function animateDots(element, base, duration, tick = 500) {
+  let dots = 0;
+  const end = Date.now() + duration;
+  while (Date.now() < end) {
+    element.textContent = base + ".".repeat(dots);
+    dots = (dots + 1) % 4;
+    await wait(tick);
+  }
+}
+
+async function runSequence() {
+  smallSplash.style.display = "block";
+  setProgress(smallFill, smallBarText, 100);
+  await wait(250);
+  bigSplash.style.display = "block";
+  setProgress(bigFill, bigBarText, 100);
+  await wait(250);
+  setProgress(bigFill, bigBarText, 0);
+  await wait(250);
+  setProgress(smallFill, smallBarText, 0);
+  await wait(250);
+  setProgress(smallFill, smallBarText, 40, "Starting communication host");
+  await wait(500);
+  setProgress(smallFill, smallBarText, 75, "Verifying integrity");
+  setBigIndeterminate();
+  await wait(1500);
+  smallSplash.style.display = "none";
+  await wait(250);
+  setProgress(bigFill, bigBarText, 0, "Initializing configuration");
+  await wait(250);
+  setProgress(bigFill, bigBarText, 33, "Validating remote session policy");
+  await wait(250);
+  setProgress(bigFill, bigBarText, 65, "Validating display configuration policy");
+  await animateDots(bigBarText, "Validating display configuration policy", 1500);
+  setProgress(bigFill, bigBarText, 70, "Initializing service session");
+  await wait(500);
+  setProgress(bigFill, bigBarText, 90, "Starting client");
+  smallSplash.style.display = "block";
+  smallInfo.style.display = "none";
+  setProgress(smallFill, smallBarText, 100);
+  await wait(250);
+  setProgress(smallFill, smallBarText, 5, "Initializing runtime connection");
+  await wait(250);
+  setProgress(smallFill, smallBarText, 10, "Initializing configuration");
+  await wait(375);
+  smallInfo.style.display = "";
+  setProgress(smallFill, smallBarText, 40, "Starting communication host");
+  await wait(500);
+  setProgress(smallFill, smallBarText, 60, "Initializing application");
+  await wait(250);
+  setProgress(smallFill, smallBarText, 70, "Initializing user interface");
+  await wait(500);
+  setProgress(smallFill, smallBarText, 80, "Initializing browser");
+  document.body.style.cursor = "wait";
+  await wait(375);
+  document.body.style.cursor = "default";
+  setProgress(smallFill, smallBarText, 100, "Initializing clipboard");
+  await wait(750);
+  smallSplash.style.display = "none";
+  setProgress(bigFill, bigBarText, 0, "SEB is running");
+  await wait(500);
+  bigSplash.style.display = "none";
+  parent.postMessage({ type: "SEB_STARTUP_COMPLETE" }, "*");
+}
+
+runSequence().catch(() => {
+  parent.postMessage({ type: "SEB_STARTUP_COMPLETE" }, "*");
+});

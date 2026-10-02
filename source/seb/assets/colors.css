@@ -1,0 +1,12 @@
+:root {
+    --action-center-dark: rgba(128, 128, 128, 0.67);
+    --background: #f0f0f0;
+    --background-transparent: rgba(240, 240, 240, 0.93);
+    --background-transparent-emphasis: rgba(211, 211, 211, 0.6);
+    --primary-text: #000;
+    --secondary-text: #696969;
+    --dodger-blue: #1e90ff;
+    --light-blue: #add8e6;
+    --sky-blue: #87ceeb;
+    --font: "Segoe UI", Tahoma, Arial, sans-serif;
+}
