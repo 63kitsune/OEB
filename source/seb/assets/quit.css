@@ -1,0 +1,101 @@
+:root { font-family: "Segoe UI", Tahoma, sans-serif; color: #111; }
+* { box-sizing: border-box; }
+body {
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+.window {
+  overflow: hidden;
+  border: 1px solid #7a7a7a;
+  border-radius: 1px;
+  background: white;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.34);
+}
+.confirmation { width: 390px; }
+.passwordDialog { width: 450px; }
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding-left: 10px;
+  color: #111;
+  background: #f7f7f7;
+  font-size: 12px;
+}
+.close {
+  width: 46px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  color: #222;
+  background: transparent;
+  font: 20px/1 "Segoe UI", sans-serif;
+}
+.close:hover { color: white; background: #e81123; }
+.messageBody {
+  display: flex;
+  align-items: center;
+  min-height: 104px;
+  padding: 22px 28px;
+  gap: 20px;
+}
+.messageBody p { margin: 0; font-size: 13px; }
+.questionIcon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: white;
+  background: #0078d7;
+  font: 700 25px/1 "Segoe UI", sans-serif;
+}
+.passwordBody {
+  display: grid;
+  grid-template-columns: 82px 1fr;
+  min-height: 116px;
+  padding: 21px 25px 17px;
+}
+.keyIcon {
+  width: 50px;
+  margin: 12px 0 0 4px;
+  color: #d3d3d3;
+  transform: rotate(90deg);
+}
+label { display: grid; align-content: end; gap: 7px; font-size: 12px; }
+input {
+  width: 100%;
+  height: 25px;
+  padding: 2px 6px;
+  border: 1px solid #8a8a8a;
+  font: inherit;
+}
+input:focus { outline: 1px solid #0078d7; border-color: #0078d7; }
+#error { grid-column: 2; margin: 5px 0 0; color: #b91c1c; font-size: 11px; }
+.buttonBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 64px;
+  padding: 0 25px;
+  gap: 10px;
+  background: #f0f0f0;
+}
+.buttonBar button {
+  min-width: 75px;
+  padding: 5px 10px;
+  border: 1px solid #adadad;
+  color: #111;
+  background: #e9e9e9;
+  font: 12px "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+.buttonBar button:hover { border-color: #0078d7; background: #e5f1fb; }
+.buttonBar .defaultButton { border-color: #0078d7; outline: 1px solid #0078d7; }
+[hidden] { display: none !important; }

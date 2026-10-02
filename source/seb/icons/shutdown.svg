@@ -1,0 +1,14 @@
+<!-- Power/Shutdown button icon -->
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <path d="M 0,0 L 1024,0 L 1024,1024 L 0,1024 L 0,0 Z" fill="none"/>
+    <!-- Power button left curve -->
+    <path d="M 512,902 C 296.61,902 122,727.28 122,511.74 C 122,388.11 179.45,277.91 269.09,206.4" 
+          stroke="#000" stroke-width="79" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <!-- Power button right curve -->
+    <path d="M 512,902 C 727.39,902 902,727.28 902,511.74 C 902,388.11 844.55,277.91 754.91,206.4" 
+          stroke="#000" stroke-width="79" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <!-- Vertical line -->
+    <path d="M 512.56,112 L 512.56,494.46" 
+          stroke="#000" stroke-width="79" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
