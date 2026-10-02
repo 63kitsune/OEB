@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OEB — Open Exam Browser</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">
+          <img src="icon.svg" alt="" width="38" height="38">
+          <div>
+            <h1>OEB</h1>
+            <p class="brandName">Open Exam Browser</p>
+          </div>
+        </div>
+        <span id="statusPill" class="pill idle">Idle</span>
+      </header>
+
+      <nav class="viewTabs" role="tablist" aria-label="OEB features">
+        <button id="sebTab" class="viewTab active" type="button" role="tab" aria-controls="sebView" data-view="seb" aria-selected="true">SEB Configuration</button>
+        <button id="assistantTab" class="viewTab" type="button" role="tab" aria-controls="assistantView" data-view="assistant" aria-selected="false" tabindex="-1">AI Autofill</button>
+      </nav>
+
+      <div id="sebView" class="featureView" role="tabpanel" aria-labelledby="sebTab">
+        <div class="fileToolbar">
+          <h2>Configuration</h2>
+          <div class="actions">
+            <label class="fileButton">
+              Open .seb file
+              <input id="fileInput" type="file" accept=".seb,application/seb,application/x-seb">
+            </label>
+            <button id="unloadButton" type="button" class="dangerButton" hidden>Unload</button>
+          </div>
+        </div>
+        <section id="summary" class="card">
+          <p id="message">Waiting for a SEB download or launch link.</p>
+          <dl id="metadata" hidden>
+            <div><dt>File</dt><dd id="filename"></dd></div>
+            <div><dt>Format</dt><dd id="mode"></dd></div>
+            <div><dt>Source</dt><dd id="sourceUrl"></dd></div>
+          </dl>
+        </section>
+
+        <form id="passwordForm" class="card" hidden>
+          <label for="password">Configuration password</label>
+          <div class="passwordRow">
+            <input id="password" type="password" autocomplete="off" required autofocus>
+            <button type="submit">Unlock</button>
+          </div>
+          <p class="hint">The password is used locally for this file and is not saved.</p>
+        </form>
+
+        <section class="card settingsCard">
+          <div class="sectionTitle">
+            <div>
+              <h2>Display</h2>
+            </div>
+          </div>
+          <label class="settingRow" for="showStartupAnimation">
+            <span>
+              <strong>Startup animation</strong>
+            </span>
+            <input id="showStartupAnimation" type="checkbox">
+          </label>
+          <label class="settingRow" for="taskbarMode">
+            <span>
+              <strong>SEB taskbar</strong>
+            </span>
+            <select id="taskbarMode">
+              <option value="auto">Automatic</option>
+              <option value="show">Always show</option>
+              <option value="hide">Always hide</option>
+            </select>
+          </label>
+          <label class="settingRow" for="taskbarScale">
+            <span>
+              <strong>Taskbar scale</strong>
+            </span>
+            <span class="scaleControl">
+              <span class="scaleInput">
+                <input id="taskbarScale" type="number" min="50" max="300" step="5" value="100" inputmode="numeric">
+                <span aria-hidden="true">%</span>
+              </span>
+              <small id="taskbarScaleStatus" class="settingStatus" role="status" aria-live="polite"></small>
+            </span>
+          </label>
+        </section>
+
+        <section id="headerDemoSection" class="card demoCard" hidden>
+          <div class="sectionTitle">
+            <div>
+              <p class="eyebrow">REQUEST HEADERS</p>
+              <h2>SEB request headers</h2>
+            </div>
+            <span id="headerDemoPill" class="pill idle">Disabled</span>
+          </div>
+          <p id="headerDemoMessage" class="demoMessage">
+            Applies the SEB User-Agent and calculated ConfigKeyHash to HTTP and HTTPS requests on all domains.
+          </p>
+          <button id="headerDemoButton" type="button">Enable SEB headers</button>
+        </section>
+
+        <section id="xmlSection" class="card xmlCard" hidden>
+          <div class="sectionTitle">
+            <h2>Configuration XML</h2>
+            <div class="actions">
+              <button id="copyButton" type="button" class="secondary">Copy</button>
+              <button id="saveButton" type="button" class="secondary">Save XML</button>
+            </div>
+          </div>
+          <details>
+            <summary>View XML</summary>
+            <pre id="xml"></pre>
+          </details>
+        </section>
+
+      </div>
+
+      <div id="assistantView" class="featureView" role="tabpanel" aria-labelledby="assistantTab" hidden>
+        <section class="card">
+          <div class="sectionTitle">
+            <div>
+              <p class="eyebrow">CURRENT WEBSITE</p>
+              <h2 id="assistantDomain">Checking active tab…</h2>
+            </div>
+            <label class="compactToggle" for="assistantEnabled">
+              <span>Enable</span>
+              <input id="assistantEnabled" type="checkbox" disabled>
+            </label>
+          </div>
+          <div class="assistantToolbar">
+            <button id="assistantRun" type="button" disabled>Ask AI &amp; fill</button>
+            <button id="assistantRefresh" type="button" class="secondary" disabled>Read questions</button>
+            <button id="assistantCopy" type="button" class="secondary" disabled>Copy JSON</button>
+          </div>
+          <p id="assistantStatus" class="assistantStatus" role="status" aria-live="polite">Open a normal web page to begin.</p>
+          <details>
+            <summary>Questions</summary>
+            <pre id="assistantQuestions">[]</pre>
+          </details>
+          <details>
+            <summary>Answers &amp; results</summary>
+            <pre id="assistantResults">No answers yet.</pre>
+          </details>
+          <details class="shortcutSetting">
+            <summary>Navigation shortcut</summary>
+            <label for="nextPageShortcut">
+              <strong>Next Moodle page shortcut</strong>
+            </label>
+            <div class="shortcutInputRow">
+              <input id="nextPageShortcut" type="text" value="Ctrl+Shift+X" readonly aria-label="Next Moodle page keyboard shortcut">
+              <button id="resetNextPageShortcut" type="button" class="secondary">Reset</button>
+            </div>
+            <small id="nextPageShortcutStatus" class="mutedText" role="status">Works when a Moodle “Next page” button is present.</small>
+          </details>
+        </section>
+
+        <section class="card providerCard">
+          <div class="sectionTitle">
+            <div>
+              <h2>AI providers</h2>
+            </div>
+            <button id="addProvider" type="button" class="secondary">Add provider</button>
+          </div>
+          <div id="providerList" class="providerList"></div>
+          <div class="providerActions">
+            <button id="saveProviders" type="button">Save providers</button>
+            <span id="providerSaveStatus" class="mutedText" role="status"></span>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <script src="browser-api.js"></script>
+    <script type="module" src="seb/popup.js"></script>
+    <script type="module" src="assistant/popup.js"></script>
+  </body>
+</html>
