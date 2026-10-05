@@ -1,6 +1,7 @@
 import { askWithFallback, normalizeProviderAccounts } from "./providers.js";
 
 const PROVIDERS_KEY = "oebAiProviders";
+const NOTE_KEY = "oebAiNote";
 const DOMAINS_KEY = "oebAiEnabledDomains";
 const LAST_RUN_KEY = "oebAiLastRun";
 const runningTabs = new Map();
@@ -37,7 +38,7 @@ export async function answerTab(requestedTabId) {
 async function runAssistant(tab, url) {
   const current = { tabId: tab.id, url: tab.url };
   try {
-    const stored = await browser.storage.local.get([DOMAINS_KEY, PROVIDERS_KEY]);
+    const stored = await browser.storage.local.get([DOMAINS_KEY, PROVIDERS_KEY, NOTE_KEY]);
     const enabledDomains = stored[DOMAINS_KEY] || {};
     const providers = normalizeProviderAccounts(stored[PROVIDERS_KEY]);
     if (!enabledDomains[url.hostname.toLowerCase()]) {
@@ -53,7 +54,7 @@ async function runAssistant(tab, url) {
     const questions = extracted.questions || [];
     if (!questions.length) throw new Error("No Moodle questions were found on this page.");
 
-    const ai = await askWithFallback(providers, questions);
+    const ai = await askWithFallback(providers, questions, stored[NOTE_KEY]);
     const after = await browser.tabs.get(tab.id);
     if (after.url !== tab.url) throw new Error("The page navigated while the AI provider was answering.");
 

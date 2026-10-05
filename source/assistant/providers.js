@@ -191,7 +191,7 @@ function explicitImageCapability(model) {
   return null;
 }
 
-export async function askWithFallback(accounts, questions) {
+export async function askWithFallback(accounts, questions, note = "") {
   const configured = normalizeProviderAccounts(accounts).filter((account) => account.enabled);
   if (!configured.length) throw new Error("Add and enable at least one AI provider.");
 
@@ -200,7 +200,7 @@ export async function askWithFallback(accounts, questions) {
     const name = providerDisplayName(account);
     try {
       validateProviderAccount(account);
-      const answers = await askProvider(account, questions);
+      const answers = await askProvider(account, questions, note);
       return { answers, provider: name, providerId: account.id, attempts };
     } catch (error) {
       attempts.push({ provider: name, error: error.message });
@@ -213,7 +213,11 @@ export async function askWithFallback(accounts, questions) {
   throw error;
 }
 
-async function askProvider(account, questions) {
+async function askProvider(account, questions, note) {
+  const taskNote = typeof note === "string" ? note.trim() : "";
+  const systemPrompt = taskNote
+    ? `Additional task instructions:\n${taskNote}\n\nRequired answer format and rules:\n${SYSTEM_PROMPT}`
+    : SYSTEM_PROMPT;
   const definition = PROVIDERS[account.provider];
   const { userPrompt, images } = prepareRequest(questions);
   if (images.length && modelImageCapability(account) === false) {
@@ -230,7 +234,7 @@ async function askProvider(account, questions) {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": account.apiKey },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: "user", parts: geminiParts(userPrompt, images) }],
           generationConfig: { temperature: 0, responseMimeType: "application/json" }
         })
@@ -243,7 +247,7 @@ async function askProvider(account, questions) {
       headers: { ...openAiHeaders(account, definition), "Content-Type": "application/json" },
       body: JSON.stringify({
         model: account.model,
-        instructions: SYSTEM_PROMPT,
+        instructions: systemPrompt,
         input: [{ role: "user", content: openAiResponseParts(userPrompt, images) }],
         store: false
       })
@@ -260,7 +264,7 @@ async function askProvider(account, questions) {
       body: JSON.stringify({
         model: account.model,
         max_tokens: 4096,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         messages: [{ role: "user", content: anthropicParts(userPrompt, images) }]
       })
     });
@@ -274,7 +278,7 @@ async function askProvider(account, questions) {
         temperature: 0,
         stream: false,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: openAiChatParts(userPrompt, images) }
         ]
       })

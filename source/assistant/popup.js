@@ -9,6 +9,7 @@ import {
 } from "./providers.js";
 
 const PROVIDERS_KEY = "oebAiProviders";
+const NOTE_KEY = "oebAiNote";
 const DOMAINS_KEY = "oebAiEnabledDomains";
 const LAST_RUN_KEY = "oebAiLastRun";
 const NEXT_SHORTCUT_KEY = "oebNextPageShortcut";
@@ -20,6 +21,8 @@ const elements = {
   sebView: byId("sebView"),
   assistantView: byId("assistantView"),
   domain: byId("assistantDomain"),
+  note: byId("assistantNote"),
+  noteStatus: byId("assistantNoteStatus"),
   enabled: byId("assistantEnabled"),
   providerList: byId("providerList"),
   addProvider: byId("addProvider"),
@@ -43,6 +46,18 @@ let providers = [];
 let busy = false;
 let providersDirty = false;
 const expandedProviders = new Set();
+let noteSaveQueue = Promise.resolve();
+
+elements.note.addEventListener("input", () => {
+  const value = elements.note.value;
+  elements.noteStatus.textContent = "Saving…";
+  noteSaveQueue = noteSaveQueue.catch(() => {}).then(() => browser.storage.local.set({ [NOTE_KEY]: value.trim() }));
+  noteSaveQueue.then(() => {
+    if (elements.note.value === value) elements.noteStatus.textContent = "Saved";
+  }).catch((error) => {
+    elements.noteStatus.textContent = `Not saved: ${error.message}`;
+  });
+});
 
 for (const tab of elements.viewTabs) {
   tab.addEventListener("click", () => showView(tab.dataset.view));
@@ -413,6 +428,7 @@ async function runAssistant() {
   elements.results.textContent = "Trying the first configured provider…";
   showStatus("Asking AI providers. You may close the popup; the background page will continue.");
   try {
+    await noteSaveQueue;
     const run = await browser.runtime.sendMessage({ type: "OEB_AI_RUN", tabId: activeTab.id });
     if (run?.error) throw Object.assign(new Error(run.error), { run });
     elements.results.textContent = JSON.stringify({
@@ -489,7 +505,8 @@ function friendlyContentError(error) {
 
 async function initialize() {
   showView(localStorage.getItem("oebPopupView") === "assistant" ? "assistant" : "seb");
-  const stored = await browser.storage.local.get([PROVIDERS_KEY, DOMAINS_KEY, LAST_RUN_KEY, NEXT_SHORTCUT_KEY]);
+  const stored = await browser.storage.local.get([PROVIDERS_KEY, DOMAINS_KEY, LAST_RUN_KEY, NEXT_SHORTCUT_KEY, NOTE_KEY]);
+  elements.note.value = typeof stored[NOTE_KEY] === "string" ? stored[NOTE_KEY] : "";
   elements.nextShortcut.value = stored[NEXT_SHORTCUT_KEY] || DEFAULT_NEXT_SHORTCUT;
   providers = normalizeProviderAccounts(stored[PROVIDERS_KEY]);
   renderProviders();

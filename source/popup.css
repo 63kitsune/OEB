@@ -90,6 +90,10 @@ summary { padding: 12px 0; cursor: pointer; font-size: 13px; font-weight: 600; }
 details pre { max-height: 190px; margin: 0; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 code { font: 11px ui-monospace, monospace; }
 [hidden] { display: none !important; }
+.promptSetting { margin-top: 16px; }
+.promptSetting textarea { display: block; width: 100%; min-height: 78px; resize: vertical; padding: 10px 12px; border: 1px solid #cdd7d9; border-radius: 6px; background: #fff; color: #242b30; font: inherit; line-height: 1.5; }
+.promptSetting textarea:focus-visible { outline: 2px solid #137568; outline-offset: 2px; }
+#assistantNoteStatus { display: block; min-height: 18px; margin-top: 4px; }
 .fileToolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 22px; }
 .providerEditor { margin: 0; border-top: 1px solid #dce3e4; }
 .providerEditor > summary { padding: 11px 16px; color: #526168; overflow-wrap: anywhere; }

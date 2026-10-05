@@ -137,6 +137,11 @@
             <button id="assistantCopy" type="button" class="secondary" disabled>Copy JSON</button>
           </div>
           <p id="assistantStatus" class="assistantStatus" role="status" aria-live="polite">Open a normal web page to begin.</p>
+          <div class="promptSetting">
+            <label for="assistantNote">System prompt / note <span class="mutedText">(optional)</span></label>
+            <textarea id="assistantNote" rows="3" placeholder="Translate each word from English to German. If it is already German, translate it to English."></textarea>
+            <small id="assistantNoteStatus" class="mutedText" role="status" aria-live="polite"></small>
+          </div>
           <details>
             <summary>Questions</summary>
             <pre id="assistantQuestions">[]</pre>

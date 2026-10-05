@@ -55,26 +55,22 @@ This project is largely based on the work of [UmmItKin/SebBypass](https://github
 - `source/`: editable extension source
   - `seb/`: SEB browser behavior and assets
   - `assistant/`: AI autofill logic
-- `release/chrome/`: ready-to-load Chromium extension build
-- `release/firefox/`: ready-to-load Firefox extension build
-
-Both release folders share the same codebase; only the browser-specific `manifest.json` differs.
 
 ## Installation
 
 ### Using the release builds
-The release folders already contain the correct `manifest.json`, so you generally do not need to rename anything.
+Prebuilt release folders are not included in this repository. Download the ZIP for your browser from [GitHub Releases](https://github.com/63kitsune/OEB/releases) and extract it. Each download includes the correct `manifest.json`; no renaming is needed.
 
 ### Loading in Chromium
 - Use a Chromium-based browser that still supports Manifest V2, such as [Helium](https://helium.computer/).
 - Open `chrome://extensions`.
 - Enable **Developer mode**.
-- Click **Load unpacked** and select `release/chrome/`.
+- Click **Load unpacked** and select the extracted Chromium release folder containing `manifest.json`.
 
 ### Loading in Firefox
 - Open `about:debugging#/runtime/this-firefox`.
 - Choose **Load Temporary Add-on**.
-- Select `release/firefox/manifest.json`.
+- Select `manifest.json` inside the extracted Firefox release folder.
 - Note: temporary add-ons are removed when Firefox closes; permanent installation requires Mozilla signing.
 
 ### Loading the source directly
@@ -94,7 +90,9 @@ When switching between browsers in `source/`, restore the previous manifest name
 3. Save your provider configuration and select **Ask AI & fill** when needed.
 4. Use the extension only in environments where it is permitted.
 
-API keys are stored locally. Autofill sends the relevant question content and images to the selected provider. Unlock passwords are not stored.
+The optional **System prompt / note** field saves automatically and applies to all providers. For example: "Translate each word from English to German. If it is already German, translate it to English." Clear the field to use the default instructions.
+
+API keys are stored locally. Autofill sends the relevant question content, images, and any saved note to the selected provider. Unlock passwords are not stored.
 
 ## Rebuild releases
 
@@ -105,7 +103,7 @@ npm install
 npm run build
 ```
 
-This rebuilds both browser release directories, minifies the JavaScript and CSS, and ensures the correct `manifest.json` is included in each output.
+This creates local `release/chrome/` and `release/firefox/` directories, minifies the JavaScript and CSS, and includes the correct `manifest.json` in each output. These generated directories are ignored by Git.
 
 ## Disclaimer
 
