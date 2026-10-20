@@ -3,6 +3,8 @@ import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
+import { validateBekCatalog } from "./source/seb/bek-catalog.js";
+
 const require = createRequire(import.meta.url);
 const { minify } = require("terser");
 const { transform } = require("lightningcss");
@@ -11,6 +13,8 @@ const root = fileURLToPath(new URL("./", import.meta.url));
 const source = join(root, "source");
 const output = join(root, "release");
 const browsers = ["chrome", "firefox"];
+// bek.json is the single editable profile source and is also the offline fallback.
+const bekCatalog = await validateBekCatalog(JSON.parse(await readFile(join(root, "bek.json"), "utf8")));
 
 for (const name of ["chrome.manifest.json", "firefox.manifest.json"]) {
   await access(join(source, name)).catch(() => {
@@ -69,6 +73,7 @@ for (const browser of browsers) {
     throw new Error("Chrome Manifest V2 does not support content_scripts.world.");
   }
   await writeFile(join(output, browser, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+  await writeFile(join(output, browser, "bek.json"), JSON.stringify(bekCatalog) + "\n");
 }
 console.log(`Built release/chrome and release/firefox: ${originalBytes} -> ${minifiedBytes} bytes of JavaScript and CSS per release.`);
 

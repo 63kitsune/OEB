@@ -21,6 +21,13 @@ import { shouldProbeDownload, probeSebDownload, containsSebConfiguration } from 
 
 import { mirrorDownloadResponse, isExtensionlessResponse } from "./download-stream.js";
 
+import { getBekCatalogInfo, refreshBekCatalog, getBekProfile } from "./bek-catalog.js";
+
+// Persistent MV2 background: check on startup, then hourly (network checks are throttled to six hours).
+void getBekCatalogInfo().catch(() => {});
+const catalogTimer = setInterval(() => { void getBekCatalogInfo().catch(() => {}); }, 60 * 60 * 1000);
+catalogTimer.unref?.();
+
 const BEK_SETTINGS_KEY = "oebBekSettings";
 
 const STATE_KEY = "sebInspectorState";
@@ -253,13 +260,20 @@ async function handleMessage(request, sender) {
       return { ok: true, state: withHeaderDemo(await loadState()) };
     case "SEB_GET_SETTINGS":
       return { ok: true, settings: await loadSettings() };
-    case "SEB_GET_BEK_SETTINGS":
-      return { ok: true, settings: await loadBekSettings() };
+    case "SEB_GET_BEK_SETTINGS": {
+      const catalog = await getBekCatalogInfo();
+      return { ok: true, settings: await loadBekSettings(catalog), catalog };
+    }
+    case "SEB_REFRESH_BEK_CATALOG": {
+      const catalog = await refreshBekCatalog();
+      return { ok: true, settings: await loadBekSettings(catalog), catalog };
+    }
     case "SEB_SET_BEK_SETTINGS": {
       const settings = normalizeBekSettings(request.settings);
       if (settings.enabled && settings.mode === "provided" && !settings.browserExamKey) {
         throw new Error("Paste a BEK or choose automatic calculation.");
       }
+      if (settings.enabled && settings.mode === "automatic") await getBekProfile(settings.buildVersion);
       const state = await loadState();
       if (getHeaderStatus().enabled && state.status === "ready") await enableLoadedHeaders(state.xml, settings);
       await browser.storage.local.set({ [BEK_SETTINGS_KEY]: settings });
@@ -627,13 +641,14 @@ async function loadSettings() {
   return normalizeSettings(stored[SETTINGS_KEY]);
 }
 
-async function loadBekSettings() {
+async function loadBekSettings(catalog) {
+  catalog ||= await getBekCatalogInfo();
   const stored = await browser.storage.local.get(BEK_SETTINGS_KEY);
   const saved = stored[BEK_SETTINGS_KEY];
   if (saved && saved.schemaVersion !== 2 && saved.mode === "provided" && !saved.browserExamKey) {
     return normalizeBekSettings({ ...saved, mode: "automatic" });
   }
-  return normalizeBekSettings(saved || DEFAULT_BEK_SETTINGS);
+  return normalizeBekSettings(saved || { ...DEFAULT_BEK_SETTINGS, buildVersion: catalog.defaultVersion });
 }
 
 async function enableLoadedHeaders(xml, settings) {

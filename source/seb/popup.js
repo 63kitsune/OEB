@@ -40,7 +40,10 @@ const elements = {
 
 const bekVersion = document.querySelector("#bekVersionSelect");
 const bekStatus = document.querySelector("#bekSettingsStatus");
-let savedBekVersion = "3.10.2.920";
+let savedBekVersion = "off";
+let bekCatalog;
+const bekUpdateButton = document.querySelector("#bekUpdateButton");
+const bekUpdateStatus = document.querySelector("#bekUpdateStatus");
 
 bekVersion.addEventListener("change", async () => {
   const value = bekVersion.value;
@@ -48,7 +51,7 @@ bekVersion.addEventListener("change", async () => {
   bekStatus.textContent = "Saving…";
   try {
     const response = await browser.runtime.sendMessage({
-      type: "SEB_SET_BEK_SETTINGS", settings: bekSettingsForVersion(value)
+      type: "SEB_SET_BEK_SETTINGS", settings: bekSettingsForVersion(value, bekCatalog)
     });
     if (!response?.ok) throw new Error(response?.error || "Could not save the BEK version.");
     savedBekVersion = value;
@@ -63,27 +66,53 @@ bekVersion.addEventListener("change", async () => {
   }
 });
 
-async function refreshBekSettings() {
-  const response = await browser.runtime.sendMessage({ type: "SEB_GET_BEK_SETTINGS" });
-  if (!response?.ok) throw new Error(response?.error || "Could not load the BEK version.");
+async function refreshBekSettings({ force = false } = {}) {
+  const response = await browser.runtime.sendMessage({ type: force ? "SEB_REFRESH_BEK_CATALOG" : "SEB_GET_BEK_SETTINGS" });
+  if (!response?.ok) throw new Error(response?.error || "Could not load the BEK versions.");
+  bekCatalog = response.catalog;
   const settings = response.settings;
   if (settings.enabled && settings.mode === "provided") {
-    // The 2.4 selector replaces the old manual-key workflow with automatic calculation.
-    const migrated = await browser.runtime.sendMessage({
-      type: "SEB_SET_BEK_SETTINGS", settings: bekSettingsForVersion("3.10.2.920")
-    });
+    const migrated = await browser.runtime.sendMessage({ type: "SEB_SET_BEK_SETTINGS",
+      settings: bekSettingsForVersion(bekCatalog.defaultVersion, bekCatalog) });
     if (!migrated?.ok) throw new Error(migrated?.error || "Could not update the saved BEK settings.");
     Object.assign(settings, migrated.settings);
   }
-  savedBekVersion = settings.enabled ? settings.buildVersion : "off";
-  bekVersion.value = savedBekVersion;
-  if (!bekVersion.value) {
-    bekVersion.value = "off";
-    bekStatus.textContent = "This saved version is unsupported. Choose SEB 3.10.2.920 to calculate BEK automatically.";
-  } else {
-    bekStatus.textContent = settings.enabled ? "Calculated automatically for each exam file." : "BEK is off.";
+  const off = document.createElement("option");
+  off.value = "off";
+  off.textContent = "Off";
+  const options = [off];
+  for (const version of bekCatalog.versions) {
+    const option = document.createElement("option");
+    option.value = version.buildVersion;
+    option.textContent = version.label;
+    options.push(option);
   }
+  savedBekVersion = settings.enabled ? settings.buildVersion : "off";
+  const missing = settings.enabled && !bekCatalog.versions.some(entry => entry.buildVersion === settings.buildVersion);
+  if (missing) {
+    const option = document.createElement("option");
+    option.value = savedBekVersion;
+    option.textContent = `Unavailable: SEB ${savedBekVersion}`;
+    option.disabled = true;
+    options.push(option);
+  }
+  bekVersion.replaceChildren(...options);
+  bekVersion.value = savedBekVersion;
+  bekVersion.disabled = false;
+  bekStatus.textContent = missing ? "This build has no profile. Check for updates or choose another version."
+    : settings.enabled ? "Calculated automatically for each exam file." : "BEK is off.";
+  bekUpdateStatus.textContent = bekCatalog.error ? "Update unavailable. Using saved versions."
+    : bekCatalog.source === "github" ? "Versions are up to date."
+    : bekCatalog.source === "cached" ? "Using saved versions." : "Using built-in versions.";
 }
+
+bekUpdateButton.addEventListener("click", async () => {
+  bekUpdateButton.disabled = true;
+  bekUpdateStatus.textContent = "Checking…";
+  try { await refreshBekSettings({ force: true }); }
+  catch (error) { bekUpdateStatus.textContent = `Could not update: ${error.message}`; }
+  finally { bekUpdateButton.disabled = false; }
+});
 
 let currentState = {};
 let displaySaveQueue = Promise.resolve();
@@ -198,6 +227,9 @@ elements.taskbarScale.addEventListener("input", () => {
 browser.storage.onChanged.addListener((changes, area) => {
   if (["session", "local"].includes(area) && changes.sebInspectorState) refresh();
   if (area === "local" && changes.sebInspectorSettings) refreshSettings();
+  if (area === "local" && changes.oebBekCatalogCache) {
+    refreshBekSettings().catch(error => { bekUpdateStatus.textContent = error.message; });
+  }
 });
 
 async function refresh() {

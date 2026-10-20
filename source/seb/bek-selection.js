@@ -1,6 +1,7 @@
-import { DEFAULT_BUILD_VERSION } from "./browser-exam-key.js";
-
-export function bekSettingsForVersion(version) {
-  if (!["off", DEFAULT_BUILD_VERSION].includes(version)) throw new Error("Choose a supported SEB version.");
-  return { enabled: version !== "off", buildVersion: DEFAULT_BUILD_VERSION, mode: "automatic", browserExamKey: "" };
+export function bekSettingsForVersion(version, catalog) {
+  const buildVersion = version === "off" ? catalog.defaultVersion : version;
+  if (!catalog.versions.some(entry => entry.buildVersion === buildVersion)) {
+    throw new Error("Choose an available SEB version.");
+  }
+  return { enabled: version !== "off", buildVersion, mode: "automatic", browserExamKey: "" };
 }

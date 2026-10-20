@@ -67,12 +67,15 @@
           <form id="bekSettingsForm">
             <label class="settingRow bekRow" for="bekVersionSelect">
               <span><strong>Browser Exam Key (BEK)</strong><small>Choose the SEB version required by your quiz.</small></span>
-              <select id="bekVersionSelect">
-                <option value="off">Off</option>
-                <option value="3.10.2.920" selected>SEB 3.10.2.920 · Windows</option>
+              <select id="bekVersionSelect" disabled>
+                <option value="off">Loading versions…</option>
               </select>
             </label>
             <p id="bekSettingsStatus" class="hint" role="status" aria-live="polite">Calculated automatically for each exam file.</p>
+            <div class="bekUpdates">
+              <button id="bekUpdateButton" type="button" class="secondary">Check for updates</button>
+              <small id="bekUpdateStatus" class="hint" role="status" aria-live="polite"></small>
+            </div>
           </form>
         </section>
         <section class="quitSetting">

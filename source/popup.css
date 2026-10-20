@@ -910,3 +910,5 @@ html.standalone main {
     width: 100%;
   }
 }
+.bekUpdates { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+.bekUpdates .hint { margin: 0; flex: 1; min-width: 160px; }

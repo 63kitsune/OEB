@@ -9,7 +9,7 @@ Based on [UmmItKin/SebBypass](https://github.com/UmmItKin/SebBypass) and the arc
 ## Features
 
 - Detect extensionless exam files and replace the previously loaded configuration.
-- Automatic BEK calculation for **SEB 3.10.2.920 Windows x64**, with an Off option.
+- Automatic BEK calculation from updatable build profiles, with an Off option. Bundled profile: **SEB 3.10.2.920 Windows x64**.
 - Customizable startup animation and exam toolbar; optional tab closing on quit.
 - AI autofill with multiple providers, models, and optional instructions.
 
@@ -29,6 +29,21 @@ Choose **Open exam file** in the popup, or click **Launch SEB** on your quiz. Au
 For AI, add a service/API key, save it, enable the current website, then choose **Fill with AI**. Shortcuts: **Ctrl+Shift+Y** for autofill; **Ctrl+Shift+X** for the next Moodle page. Image support depends on the model.
 
 API keys stay in local browser storage. Autofill sends question content and instructions to your selected provider. File passwords are not saved. OEB does not enforce operating-system kiosk restrictions.
+
+## BEK profile updates
+
+[`bek.json`](bek.json) is the single profile source. Once committed and pushed to
+`main`, the add-on reads it from [GitHub](https://raw.githubusercontent.com/63kitsune/OEB/refs/heads/main/bek.json)
+on startup and checks for changes every six hours. **Check for updates** refreshes
+it immediately. A bundled/cached copy works offline; invalid updates are ignored.
+Current exam headers stay unchanged until another configuration is loaded.
+
+To support a new build, add its verified `profiles` entry and optionally change
+`defaultVersion`. Each entry needs `buildVersion`, `platform`, `algorithm`,
+`prefixBase64`, `prefixSha256`, `integritySalt`, and an optional `label`. The
+supported algorithm is `seb-windows-native-v1` for `windows-x64`. This is build
+data used to calculate each configuration's BEK, not a universal quiz key. An
+algorithm change still needs an add-on update. The build bundles the same JSON.
 
 ## Preview
 

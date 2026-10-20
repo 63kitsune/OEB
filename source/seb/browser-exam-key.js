@@ -1,5 +1,5 @@
 import { calculateRequestConfigKeySync, getSebExamSalt } from "./config-key.js";
-import windows3102920 from "./build-profiles/windows-3.10.2.920-x64.js";
+import { getBekProfile } from "./bek-catalog.js";
 
 // Extracted from the supplied 3.10.2.920 Windows x64 application certificate.
 export const CERTIFICATE_THUMBPRINT = "ECAC9DF025F5D208F6190FC4D6F9D329576598C7";
@@ -33,13 +33,11 @@ export async function resolveBrowserExamKey(xml, configHash, settings) {
 // The installation data is build-specific; it is not a stored BEK for a particular quiz.
 export async function calculateNativeBrowserExamKey(xml, configHash, settings = {}) {
   const { buildVersion } = normalizeBekSettings(settings);
-  if (buildVersion !== windows3102920.buildVersion) {
-    throw new Error(`Automatic BEK calculation supports Windows x64 ${windows3102920.buildVersion}. This build has no verified profile: ${buildVersion}.`);
-  }
+  const profile = await getBekProfile(buildVersion);
   if (!/^[a-f\d]{64}$/i.test(configHash || "")) throw new Error("Invalid configuration key.");
-  const prefix = Uint8Array.from(atob(windows3102920.prefixBase64), character => character.charCodeAt(0));
+  const prefix = Uint8Array.from(atob(profile.prefixBase64), character => character.charCodeAt(0));
   const saltHex = Array.from(getSebExamSalt(xml), byte => byte.toString(16).padStart(2, "0")).join("");
-  const suffix = new TextEncoder().encode(configHash.toLowerCase() + saltHex + windows3102920.integritySalt);
+  const suffix = new TextEncoder().encode(configHash.toLowerCase() + saltHex + profile.integritySalt);
   const input = new Uint8Array(prefix.length + suffix.length);
   input.set(prefix);
   input.set(suffix, prefix.length);
