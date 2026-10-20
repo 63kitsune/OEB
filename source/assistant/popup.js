@@ -34,6 +34,10 @@ const elements = {
   status: byId("assistantStatus"),
   questions: byId("assistantQuestions"),
   results: byId("assistantResults"),
+  autofillShortcutSetting: byId("autofillShortcutSetting"),
+  autofillShortcut: byId("autofillShortcut"),
+  resetAutofillShortcut: byId("resetAutofillShortcut"),
+  autofillShortcutStatus: byId("autofillShortcutStatus"),
   nextShortcut: byId("nextPageShortcut"),
   resetNextShortcut: byId("resetNextPageShortcut"),
   nextShortcutStatus: byId("nextPageShortcutStatus")
@@ -80,7 +84,7 @@ elements.addProvider.addEventListener("click", () => {
   providers.push(account);
   providersDirty = true;
   renderProviders();
-  showProviderStatus("New provider added. Save when ready.");
+  showProviderStatus("Service added. Enter your API key, then save.");
 });
 
 elements.saveProviders.addEventListener("click", saveProviders);
@@ -142,7 +146,7 @@ function renderProviders() {
   if (!providers.length) {
     const empty = document.createElement("p");
     empty.className = "emptyProviders";
-    empty.textContent = "No providers yet. Add one to enable AI autofill.";
+    empty.textContent = "No AI services added yet. Add one to enable AI autofill.";
     elements.providerList.append(empty);
     controls();
     return;
@@ -166,7 +170,7 @@ function createProviderRow(account, index) {
   editor.className = "providerEditor";
   editor.open = expandedProviders.has(account.id);
   const editorTitle = document.createElement("summary");
-  editorTitle.textContent = account.model || "Account settings";
+  editorTitle.textContent = account.model || "Service settings";
   editor.addEventListener("toggle", () => {
     if (editor.open) expandedProviders.add(account.id);
     else expandedProviders.delete(account.id);
@@ -174,16 +178,16 @@ function createProviderRow(account, index) {
   const rowActions = document.createElement("div");
   rowActions.className = "rowActions";
   rowActions.append(
-    iconButton("↑", "Move provider up", () => moveProvider(index, -1), index === 0),
-    iconButton("↓", "Move provider down", () => moveProvider(index, 1), index === providers.length - 1),
-    iconButton("Remove", "Remove provider", () => removeProvider(index))
+    iconButton("↑", "Move service up", () => moveProvider(index, -1), index === 0),
+    iconButton("↓", "Move service down", () => moveProvider(index, 1), index === providers.length - 1),
+    iconButton("Remove", "Remove service", () => removeProvider(index))
   );
   header.append(title, rowActions);
 
   const grid = document.createElement("div");
   grid.className = "providerGrid";
 
-  const enabled = checkboxField("Use in fallback chain", account.enabled, (checked) => {
+  const enabled = checkboxField("Use this service", account.enabled, (checked) => {
     account.enabled = checked;
     markProvidersDirty();
   });
@@ -230,7 +234,7 @@ function createProviderRow(account, index) {
   };
   const modelInput = textInput(account.model, definition.modelPlaceholder, (value) => {
     account.model = value;
-    editorTitle.textContent = value || "Account settings";
+    editorTitle.textContent = value || "Service settings";
     updateImageSupport();
     markProvidersDirty();
   });
@@ -459,6 +463,48 @@ async function copyQuestions() {
   }
 }
 
+async function loadAutofillShortcut() {
+  const commands = await browser.commands.getAll();
+  const command = commands.find((item) => item.name === "answer-questions");
+  elements.autofillShortcut.value = command?.shortcut || "";
+  elements.autofillShortcut.placeholder = "No shortcut assigned";
+}
+
+async function updateAutofillShortcut(shortcut) {
+  elements.autofillShortcut.disabled = true;
+  elements.resetAutofillShortcut.disabled = true;
+  try {
+    if (shortcut === null) await browser.commands.reset("answer-questions");
+    else await browser.commands.update({ name: "answer-questions", shortcut });
+    await loadAutofillShortcut();
+    elements.autofillShortcutStatus.textContent = elements.autofillShortcut.value
+      ? `Saved. Press ${elements.autofillShortcut.value} to ask AI and fill answers.`
+      : "No shortcut assigned. Choose another combination.";
+  } catch (error) {
+    elements.autofillShortcutStatus.textContent = `Could not save shortcut: ${error.message}`;
+  } finally {
+    elements.autofillShortcut.disabled = false;
+    elements.resetAutofillShortcut.disabled = false;
+  }
+}
+
+elements.autofillShortcut.addEventListener("keydown", (event) => {
+  if (event.key === "Tab" || event.key === "Escape") return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.repeat) return;
+  let shortcut = shortcutFromEvent(event);
+  if (!shortcut) return;
+  // Firefox command names differ from DOM key names, especially on macOS.
+  if (/Mac/i.test(navigator.platform)) shortcut = shortcut.replace(/^Ctrl(?=\+)/, "MacCtrl");
+  shortcut = shortcut.replace(/\bMeta\b/, "Command").replace(/Arrow(Up|Down|Left|Right)$/, "$1");
+  if (/^(Key[A-Z]|Digit[0-9])$/.test(event.code)) {
+    shortcut = shortcut.replace(/[^+]+$/, event.code.replace(/^(Key|Digit)/, ""));
+  }
+  updateAutofillShortcut(shortcut);
+});
+elements.resetAutofillShortcut.addEventListener("click", () => updateAutofillShortcut(null));
+
 function shortcutFromEvent(event) {
   if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) return "";
   const parts = [];
@@ -504,12 +550,21 @@ function friendlyContentError(error) {
 }
 
 async function initialize() {
-  showView(localStorage.getItem("oebPopupView") === "assistant" ? "assistant" : "seb");
+  showView(new URL(location.href).searchParams.get("file") === "1" ? "seb" : localStorage.getItem("oebPopupView") === "assistant" ? "assistant" : "seb");
+  if (browser.commands?.update && browser.commands?.getAll && browser.commands?.reset) {
+    elements.autofillShortcutSetting.hidden = false;
+    try {
+      await loadAutofillShortcut();
+    } catch (error) {
+      elements.autofillShortcutStatus.textContent = `Could not read shortcut: ${error.message}`;
+    }
+  }
   const stored = await browser.storage.local.get([PROVIDERS_KEY, DOMAINS_KEY, LAST_RUN_KEY, NEXT_SHORTCUT_KEY, NOTE_KEY]);
   elements.note.value = typeof stored[NOTE_KEY] === "string" ? stored[NOTE_KEY] : "";
   elements.nextShortcut.value = stored[NEXT_SHORTCUT_KEY] || DEFAULT_NEXT_SHORTCUT;
   providers = normalizeProviderAccounts(stored[PROVIDERS_KEY]);
   renderProviders();
+  document.querySelector("#providerSetup").open = !providers.length;
 
   try {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -533,7 +588,7 @@ async function initialize() {
     } else if (elements.enabled.checked) {
       await readQuestions();
     } else {
-      showStatus("Enable AI autofill for this domain to read questions.");
+      showStatus("Turn on the assistant for this website to read its questions.");
     }
   } catch (error) {
     elements.domain.textContent = "No supported page open";

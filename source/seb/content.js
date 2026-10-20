@@ -4,6 +4,7 @@ const STARTUP_FRAME_ID = "seb-local-startup-frame";
 const TASKBAR_FRAME_ID = "seb-local-taskbar-frame";
 const QUIT_FRAME_ID = "seb-local-quit-frame";
 const IS_TOP_FRAME = window === window.top;
+let cancelStartup;
 let presentationSettings = { showStartupAnimation: true, taskbarMode: "auto", taskbarScale: 100, config: { taskbar: {} } };
 
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -87,7 +88,8 @@ function findUrl(control) {
   for (const candidate of candidates) {
     if (!candidate) continue;
     try {
-      return SEB_SCHEME.test(candidate) ? candidate : new URL(candidate, location.href).href;
+      const resolved = SEB_SCHEME.test(candidate) ? candidate : new URL(candidate, location.href).href;
+      if (isSebUrl(resolved)) return resolved;
     } catch {
       // Try the next candidate.
     }
@@ -95,21 +97,52 @@ function findUrl(control) {
 }
 
 function isSebUrl(url) {
-  return SEB_SCHEME.test(url) || SEB_FILE.test(url);
+  if (SEB_SCHEME.test(url) || SEB_FILE.test(url)) return true;
+  try {
+    return /\/mod\/quiz\/accessrule\/seb\/config\.php$/i.test(new URL(url, location.href).pathname);
+  } catch { return false; }
 }
 
-function sendUrl(url, source, method = "GET", body) {
-  browser.runtime.sendMessage({
+async function sendUrl(url, source, method = "GET", body) {
+  showLinkStatus("Loading the SEB configuration…");
+  try {
+    const response = await browser.runtime.sendMessage({
     type: "SEB_CAPTURE_URL",
     url,
     source,
-    autoLaunch: SEB_SCHEME.test(url),
+    autoLaunch: true,
     method,
     body,
     pageUrl: location.href
-  }).catch(() => {
-    // The extension may have been reloaded while this page was open.
-  });
+    });
+    if (!response?.ok) throw new Error(response?.error || "Could not load the configuration. Reload this page and try again.");
+    if (response.state?.status === "password-needed") {
+      showLinkStatus("This SEB file needs a password. Open the OEB popup to unlock it.");
+    } else {
+      document.getElementById("oeb-seb-link-status")?.remove();
+    }
+  } catch (error) {
+    showLinkStatus(`Could not open the quiz: ${error.message}`, true);
+  }
+}
+
+function showLinkStatus(message, error = false) {
+  document.getElementById("oeb-seb-link-status")?.remove();
+  const notice = document.createElement("div");
+  notice.id = "oeb-seb-link-status";
+  notice.setAttribute("role", error ? "alert" : "status");
+  Object.assign(notice.style, { position: "fixed", top: "12px", right: "12px", zIndex: "2147483647",
+    maxWidth: "420px", padding: "14px", color: "#fff", background: error ? "#991b1b" : "#1e293b",
+    borderRadius: "8px", font: "14px/1.5 system-ui", boxShadow: "0 4px 16px #0004" });
+  const text = document.createElement("span");
+  text.textContent = message;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "Dismiss";
+  close.style.marginLeft = "12px";
+  close.addEventListener("click", () => notice.remove());
+  notice.append(text, close);
+  document.documentElement.append(notice);
 }
 
 async function initializePresentation() {
@@ -152,6 +185,7 @@ function showStartup(settings) {
     if (event.source === frame.contentWindow && event.data?.type === "SEB_STARTUP_COMPLETE") finish();
   };
   window.addEventListener("message", onMessage);
+  cancelStartup = () => { finished = true; window.removeEventListener("message", onMessage); };
 }
 
 function applyPresentation(settings) {
@@ -190,6 +224,8 @@ function showSebBar(taskbar = {}, configuredScale = 100) {
 }
 
 function removePresentation() {
+  cancelStartup?.();
+  cancelStartup = undefined;
   document.getElementById(STARTUP_FRAME_ID)?.remove();
   document.getElementById(TASKBAR_FRAME_ID)?.remove();
   document.getElementById(QUIT_FRAME_ID)?.remove();
@@ -259,6 +295,7 @@ async function resetMoodleSebAccess(cmid) {
     const response = await fetch("/mod/quiz/accessrule/seb/clear_session.php", {
       method: "POST",
       credentials: "same-origin",
+      signal: AbortSignal.timeout(5000),
       headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
       body
     });

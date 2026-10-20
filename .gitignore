@@ -1,3 +1,5 @@
 /release/
-node_modules/
+/node_modules/
 /source/manifest.json
+*.log
+.DS_Store

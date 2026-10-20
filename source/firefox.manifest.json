@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "OEB — Open Exam Browser",
   "description": "Opens SEB configurations and provides optional multi-provider AI autofill for Moodle questions.",
-  "version": "2.3.5",
+  "version": "2.4.0",
   "icons": {
     "16": "icon.svg",
     "48": "icon.svg",
@@ -43,6 +43,7 @@
         "assistant/extract.js",
         "assistant/apply.js",
         "assistant/content.js",
+        "seb/download-content.js",
         "seb/content.js"
       ],
       "css": [
@@ -50,6 +51,17 @@
       ],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "seb/download-page.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
@@ -69,7 +81,16 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "oeb@open-exam-browser.local",
-      "strict_min_version": "128.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "websiteContent",
+          "authenticationInfo"
+        ]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
     }
   }
 }

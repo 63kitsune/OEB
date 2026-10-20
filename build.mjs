@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { minify } = require("terser");
 const { transform } = require("lightningcss");
+const { zipSync } = require("fflate");
 const root = fileURLToPath(new URL("./", import.meta.url));
 const source = join(root, "source");
 const output = join(root, "release");
@@ -63,6 +64,27 @@ async function buildDirectory(relative = "") {
 await buildDirectory();
 for (const browser of browsers) {
   const manifest = JSON.parse(await readFile(join(source, `${browser}.manifest.json`), "utf8"));
+  if (browser === "chrome" && manifest.manifest_version === 2
+      && manifest.content_scripts?.some(entry => "world" in entry)) {
+    throw new Error("Chrome Manifest V2 does not support content_scripts.world.");
+  }
   await writeFile(join(output, browser, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 }
 console.log(`Built release/chrome and release/firefox: ${originalBytes} -> ${minifiedBytes} bytes of JavaScript and CSS per release.`);
+
+// Archives contain manifest.json at their root, ready to extract and load.
+const packageMetadata = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+async function archiveFiles(directory, relative = "", files = {}) {
+  for (const entry of await readdir(join(directory, relative), { withFileTypes: true })) {
+    const path = join(relative, entry.name);
+    if (entry.isDirectory()) await archiveFiles(directory, path, files);
+    else files[path.replaceAll("\\", "/")] = new Uint8Array(await readFile(join(directory, path)));
+  }
+  return files;
+}
+for (const browser of browsers) {
+  const files = await archiveFiles(join(output, browser));
+  const name = `OEB-${packageMetadata.version}-${browser}.zip`;
+  await writeFile(join(output, name), zipSync(files, { level: 9 }));
+  console.log(`Packaged release/${name}`);
+}

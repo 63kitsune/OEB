@@ -27,16 +27,20 @@ globalThis.OEBAssistant.applyAnswers = async function applyAnswers(answers) {
     return text(clone).replace(/^[a-z]\.[\s\u00a0]*/i, '');
   };
   const setRichText = (textarea, value) => {
-    const safe = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const html = `<p>${safe.replace(/\r?\n/g, '<br>')}</p>`;
     // Content scripts cannot normally access the page's TinyMCE JavaScript object. Moodle still
     // submits this textarea, so update it directly and mirror the result into TinyMCE's iframe.
-    textarea.value = html;
     const iframe = document.getElementById(`${textarea.id}_ifr`) ||
       textarea.closest('.editor_atto, .editor_tiny, .felement')?.querySelector('iframe');
     const body = iframe?.contentDocument?.body;
+    const editorDocument = body?.ownerDocument || textarea.ownerDocument;
+    const paragraph = editorDocument.createElement('p');
+    String(value).split(/\r?\n/).forEach((line, index) => {
+      if (index) paragraph.append(editorDocument.createElement('br'));
+      paragraph.append(editorDocument.createTextNode(line));
+    });
+    textarea.value = paragraph.outerHTML;
     if (body) {
-      body.innerHTML = html;
+      body.replaceChildren(paragraph);
       body.dispatchEvent(new Event('input', {bubbles: true}));
       body.dispatchEvent(new Event('change', {bubbles: true}));
     }

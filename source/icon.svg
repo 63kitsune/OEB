@@ -1,7 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="24" fill="#137568"/>
-  <rect x="24" y="28" width="80" height="64" rx="7" fill="none" stroke="#fff" stroke-width="7"/>
-  <path d="M24 45h80M48 105h32M64 92v13" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="35" cy="37" r="3" fill="#f5c95d"/>
-  <path d="m46 68 12 12 25-25" fill="none" stroke="#f5c95d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">OEB — Open world</title>
+  <desc id="desc">A blue globe with orange continents and a proportionate, swung-open amber shackle behind it. The free end is clearly separated from the globe. No surrounding C shape. Transparent background.</desc>
+  <defs>
+    <linearGradient id="ocean" x1="34" y1="43" x2="103" y2="114" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#369FCB"/>
+      <stop offset="1" stop-color="#196DA7"/>
+    </linearGradient>
+    <clipPath id="globe"><circle cx="68" cy="79" r="40"/></clipPath>
+  </defs>
+  <!-- Draw the shackle first so the globe naturally covers its attached end. -->
+  <path d="M38 66V42a24 24 0 0 1 48 0" transform="rotate(-35 38 66)" fill="none" stroke="#F6A13A" stroke-width="10.5" stroke-linecap="round"/>
+  <circle cx="68" cy="79" r="40" fill="url(#ocean)"/>
+  <g clip-path="url(#globe)" fill="#F6A13A">
+    <path d="M28 53c9-10 20-15 31-10l5 7-8 4-2 8-10 4-3 8-7-2-5-9Z"/>
+    <path d="m57 75 9-6 10 4 6 9-3 9-8 7-4 12-7 2-6-12-5-6 1-11Z"/>
+    <path d="m75 46 16 1 15 13 3 13-9 5-8-8-8 3-8-7-9-2 2-8 6-3Z"/>
+    <path d="m92 98 11-3 5 9-7 7-9-2-5-6Z"/>
+  </g>
+  <circle cx="68" cy="79" r="40" fill="none" stroke="#4CB0D3" stroke-width="5"/>
 </svg>

@@ -13,113 +13,134 @@
           <img src="icon.svg" alt="" width="38" height="38">
           <div>
             <h1>OEB</h1>
-            <p class="brandName">Open Exam Browser</p>
+            <p class="brandName">Open Exam Browser <span class="releaseLabel">2.4.0</span></p>
           </div>
         </div>
-        <span id="statusPill" class="pill idle">Idle</span>
+        <span id="statusPill" class="pill idle">Ready</span>
       </header>
 
       <nav class="viewTabs" role="tablist" aria-label="OEB features">
-        <button id="sebTab" class="viewTab active" type="button" role="tab" aria-controls="sebView" data-view="seb" aria-selected="true">SEB Configuration</button>
-        <button id="assistantTab" class="viewTab" type="button" role="tab" aria-controls="assistantView" data-view="assistant" aria-selected="false" tabindex="-1">AI Autofill</button>
+        <button id="sebTab" class="viewTab active" type="button" role="tab" aria-controls="sebView" data-view="seb" aria-selected="true">Exam</button>
+        <button id="assistantTab" class="viewTab" type="button" role="tab" aria-controls="assistantView" data-view="assistant" aria-selected="false" tabindex="-1">AI assistant</button>
       </nav>
 
       <div id="sebView" class="featureView" role="tabpanel" aria-labelledby="sebTab">
-        <div class="fileToolbar">
-          <h2>Configuration</h2>
+        <section class="welcome">
+          <p class="eyebrow">GET STARTED</p>
+          <h2>Open your exam</h2>
+          <p>Click <strong>Launch SEB</strong> on your quiz page, or open a downloaded exam file here.</p>
           <div class="actions">
-            <label class="fileButton">
-              Open .seb file
-              <input id="fileInput" type="file" accept=".seb,application/seb,application/x-seb">
+            <button id="openFileButton" type="button">Open exam file</button>
+            <label id="filePickerLabel" class="fileButton" hidden>
+              Choose exam file
+              <input id="fileInput" type="file">
             </label>
-            <button id="unloadButton" type="button" class="dangerButton" hidden>Unload</button>
+            <button id="unloadButton" type="button" class="secondary" hidden>Close exam</button>
           </div>
-        </div>
+          <p id="filePickerHint" class="hint" hidden>Choose the file you downloaded. A .seb extension is not required.</p>
+        </section>
         <section id="summary" class="card">
-          <p id="message">Waiting for a SEB download or launch link.</p>
-          <dl id="metadata" hidden>
-            <div><dt>File</dt><dd id="filename"></dd></div>
-            <div><dt>Format</dt><dd id="mode"></dd></div>
-            <div><dt>Source</dt><dd id="sourceUrl"></dd></div>
-          </dl>
-        </section>
-
-        <form id="passwordForm" class="card" hidden>
-          <label for="password">Configuration password</label>
-          <div class="passwordRow">
-            <input id="password" type="password" autocomplete="off" required autofocus>
-            <button type="submit">Unlock</button>
-          </div>
-          <p class="hint">The password is used locally for this file and is not saved.</p>
-        </form>
-
-        <section class="card settingsCard">
-          <div class="sectionTitle">
-            <div>
-              <h2>Display</h2>
-            </div>
-          </div>
-          <label class="settingRow" for="showStartupAnimation">
-            <span>
-              <strong>Startup animation</strong>
-            </span>
-            <input id="showStartupAnimation" type="checkbox">
-          </label>
-          <label class="settingRow" for="taskbarMode">
-            <span>
-              <strong>SEB taskbar</strong>
-            </span>
-            <select id="taskbarMode">
-              <option value="auto">Automatic</option>
-              <option value="show">Always show</option>
-              <option value="hide">Always hide</option>
-            </select>
-          </label>
-          <label class="settingRow" for="taskbarScale">
-            <span>
-              <strong>Taskbar scale</strong>
-            </span>
-            <span class="scaleControl">
-              <span class="scaleInput">
-                <input id="taskbarScale" type="number" min="50" max="300" step="5" value="100" inputmode="numeric">
-                <span aria-hidden="true">%</span>
-              </span>
-              <small id="taskbarScaleStatus" class="settingStatus" role="status" aria-live="polite"></small>
-            </span>
-          </label>
-        </section>
-
-        <section id="headerDemoSection" class="card demoCard" hidden>
-          <div class="sectionTitle">
-            <div>
-              <p class="eyebrow">REQUEST HEADERS</p>
-              <h2>SEB request headers</h2>
-            </div>
-            <span id="headerDemoPill" class="pill idle">Disabled</span>
-          </div>
-          <p id="headerDemoMessage" class="demoMessage">
-            Applies the SEB User-Agent and calculated ConfigKeyHash to HTTP and HTTPS requests on all domains.
-          </p>
-          <button id="headerDemoButton" type="button">Enable SEB headers</button>
-        </section>
-
-        <section id="xmlSection" class="card xmlCard" hidden>
-          <div class="sectionTitle">
-            <h2>Configuration XML</h2>
-            <div class="actions">
-              <button id="copyButton" type="button" class="secondary">Copy</button>
-              <button id="saveButton" type="button" class="secondary">Save XML</button>
-            </div>
-          </div>
-          <details>
-            <summary>View XML</summary>
-            <pre id="xml"></pre>
+          <p id="message" role="status" aria-live="polite">Ready when you are.</p>
+          <details id="metadata" hidden>
+            <summary>File details</summary>
+            <dl>
+              <div><dt>File</dt><dd id="filename"></dd></div>
+              <div><dt>Format</dt><dd id="mode"></dd></div>
+              <div><dt>Source</dt><dd id="sourceUrl"></dd></div>
+            </dl>
           </details>
         </section>
+        <form id="passwordForm" class="card" hidden>
+          <label for="password">This exam file needs a password</label>
+          <div class="passwordRow">
+            <input id="password" type="password" autocomplete="off" required placeholder="File password">
+            <button type="submit">Open file</button>
+          </div>
+          <p class="hint">Used only to open this file. Your password is not saved.</p>
+        </form>
+        <section class="card quickSettings" aria-label="Exam settings">
+          <label class="settingRow" for="checkDownloadsForSeb">
+            <span><strong>Find exam files automatically</strong><small>Check downloads for SEB files, even without a .seb name.</small></span>
+            <input id="checkDownloadsForSeb" type="checkbox" checked aria-describedby="downloadCheckStatus">
+          </label>
+          <p id="downloadCheckStatus" class="hint" role="status" aria-live="polite"></p>
+          <form id="bekSettingsForm">
+            <label class="settingRow bekRow" for="bekVersionSelect">
+              <span><strong>Browser Exam Key (BEK)</strong><small>Choose the SEB version required by your quiz.</small></span>
+              <select id="bekVersionSelect">
+                <option value="off">Off</option>
+                <option value="3.10.2.920" selected>SEB 3.10.2.920 · Windows</option>
+              </select>
+            </label>
+            <p id="bekSettingsStatus" class="hint" role="status" aria-live="polite">Calculated automatically for each exam file.</p>
+          </form>
+        </section>
+        <section class="quitSetting">
+          <label class="settingRow" for="closeTabOnQuit">
+            <span><strong>Close exam tab on quit</strong><small>Turn off to keep the page open after quitting.</small></span>
+            <input id="closeTabOnQuit" type="checkbox" checked>
+          </label>
+          <p id="quitSettingStatus" class="hint" role="status" aria-live="polite"></p>
+        </section>
+        <details class="settingsDetails">
+          <summary>Appearance</summary>
+          <section class="settingsCard" aria-label="Appearance settings">
+            <label class="settingRow" for="showStartupAnimation">
+              <span><strong>Show opening animation</strong></span>
+              <input id="showStartupAnimation" type="checkbox">
+            </label>
+            <label class="settingRow" for="taskbarMode">
+              <span><strong>Exam toolbar</strong></span>
+              <select id="taskbarMode">
+                <option value="auto">Follow exam settings</option>
+                <option value="show">Always show</option>
+                <option value="hide">Always hide</option>
+              </select>
+            </label>
+            <label class="settingRow" for="taskbarScale">
+              <span><strong>Toolbar size</strong></span>
+              <span class="scaleControl"><span class="scaleInput">
+                <input id="taskbarScale" type="number" min="50" max="300" step="5" value="100" inputmode="numeric">
+                <span aria-hidden="true">%</span>
+              </span></span>
+            </label>
+            <p id="taskbarScaleStatus" class="hint" role="status" aria-live="polite"></p>
+          </section>
+        </details>
+        <details id="headerDemoSection" class="settingsDetails" hidden>
+          <summary>Connection details</summary>
+          <div class="sectionTitle"><h2>Exam connection</h2><span id="headerDemoPill" class="pill idle">Off</span></div>
+          <p id="headerDemoMessage" class="demoMessage"></p>
+          <button id="headerDemoButton" type="button" class="secondary">Connect</button>
+        </details>
+        <details id="xmlSection" class="settingsDetails" hidden>
+          <summary>Configuration details</summary>
+          <div class="actions">
+            <button id="copyButton" type="button" class="secondary">Copy</button>
+            <button id="saveButton" type="button" class="secondary">Save XML</button>
+          </div>
+          <pre id="xml"></pre>
+        </details>
 
       </div>
 
       <div id="assistantView" class="featureView" role="tabpanel" aria-labelledby="assistantTab" hidden>
+        <details id="providerSetup" class="providerCard" open>
+          <summary>AI service setup</summary>
+          <div class="sectionTitle">
+            <div>
+              <h2>Connect an AI service</h2>
+            </div>
+            <button id="addProvider" type="button" class="secondary">Add service</button>
+          </div>
+          <p class="hint">Add a service and its API key, then enable the assistant for this website.</p>
+          <div id="providerList" class="providerList"></div>
+          <div class="providerActions">
+            <button id="saveProviders" type="button">Save services</button>
+            <span id="providerSaveStatus" class="mutedText" role="status"></span>
+          </div>
+        </details>
+
         <section class="card">
           <div class="sectionTitle">
             <div>
@@ -132,13 +153,13 @@
             </label>
           </div>
           <div class="assistantToolbar">
-            <button id="assistantRun" type="button" disabled>Ask AI &amp; fill</button>
+            <button id="assistantRun" type="button" disabled>Fill with AI</button>
             <button id="assistantRefresh" type="button" class="secondary" disabled>Read questions</button>
-            <button id="assistantCopy" type="button" class="secondary" disabled>Copy JSON</button>
+            <button id="assistantCopy" type="button" class="secondary" disabled>Copy questions</button>
           </div>
           <p id="assistantStatus" class="assistantStatus" role="status" aria-live="polite">Open a normal web page to begin.</p>
           <div class="promptSetting">
-            <label for="assistantNote">System prompt / note <span class="mutedText">(optional)</span></label>
+            <label for="assistantNote">Instructions for AI <span class="mutedText">(optional)</span></label>
             <textarea id="assistantNote" rows="3" placeholder="Translate each word from English to German. If it is already German, translate it to English."></textarea>
             <small id="assistantNoteStatus" class="mutedText" role="status" aria-live="polite"></small>
           </div>
@@ -151,7 +172,15 @@
             <pre id="assistantResults">No answers yet.</pre>
           </details>
           <details class="shortcutSetting">
-            <summary>Navigation shortcut</summary>
+            <summary>Keyboard shortcuts</summary>
+            <div id="autofillShortcutSetting" hidden>
+              <label for="autofillShortcut"><strong>AI autofill shortcut</strong></label>
+              <div class="shortcutInputRow">
+                <input id="autofillShortcut" type="text" readonly aria-label="AI autofill keyboard shortcut">
+                <button id="resetAutofillShortcut" type="button" class="secondary">Reset</button>
+              </div>
+              <small id="autofillShortcutStatus" class="mutedText" role="status" aria-live="polite">Click the field and press your preferred key combination.</small>
+            </div>
             <label for="nextPageShortcut">
               <strong>Next Moodle page shortcut</strong>
             </label>
@@ -163,19 +192,7 @@
           </details>
         </section>
 
-        <section class="card providerCard">
-          <div class="sectionTitle">
-            <div>
-              <h2>AI providers</h2>
-            </div>
-            <button id="addProvider" type="button" class="secondary">Add provider</button>
-          </div>
-          <div id="providerList" class="providerList"></div>
-          <div class="providerActions">
-            <button id="saveProviders" type="button">Save providers</button>
-            <span id="providerSaveStatus" class="mutedText" role="status"></span>
-          </div>
-        </section>
+
 
       </div>
     </main>

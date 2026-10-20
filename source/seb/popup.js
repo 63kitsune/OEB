@@ -1,6 +1,13 @@
 import { calculateSebConfigHash } from "./config-key.js";
+import { importSelectedFile } from "./file-import.js";
 
-const SETTINGS_KEY = "sebInspectorSettings";
+import { bekSettingsForVersion } from "./bek-selection.js";
+
+const importPage = new URL(location.href).searchParams;
+const standaloneImport = importPage.get("file") === "1";
+const importTarget = Number(importPage.get("target"));
+document.documentElement.classList.toggle("standalone", standaloneImport);
+document.querySelector("#filePickerHint").hidden = !standaloneImport;
 
 const elements = {
   statusPill: document.querySelector("#statusPill"),
@@ -18,6 +25,10 @@ const elements = {
   xmlSection: document.querySelector("#xmlSection"),
   xml: document.querySelector("#xml"),
   fileInput: document.querySelector("#fileInput"),
+  closeTabOnQuit: document.querySelector("#closeTabOnQuit"),
+  quitSettingStatus: document.querySelector("#quitSettingStatus"),
+  checkDownloadsForSeb: document.querySelector("#checkDownloadsForSeb"),
+  downloadCheckStatus: document.querySelector("#downloadCheckStatus"),
   showStartupAnimation: document.querySelector("#showStartupAnimation"),
   taskbarMode: document.querySelector("#taskbarMode"),
   taskbarScale: document.querySelector("#taskbarScale"),
@@ -26,6 +37,53 @@ const elements = {
   saveButton: document.querySelector("#saveButton"),
   unloadButton: document.querySelector("#unloadButton")
 };
+
+const bekVersion = document.querySelector("#bekVersionSelect");
+const bekStatus = document.querySelector("#bekSettingsStatus");
+let savedBekVersion = "3.10.2.920";
+
+bekVersion.addEventListener("change", async () => {
+  const value = bekVersion.value;
+  bekVersion.disabled = true;
+  bekStatus.textContent = "Saving…";
+  try {
+    const response = await browser.runtime.sendMessage({
+      type: "SEB_SET_BEK_SETTINGS", settings: bekSettingsForVersion(value)
+    });
+    if (!response?.ok) throw new Error(response?.error || "Could not save the BEK version.");
+    savedBekVersion = value;
+    bekStatus.textContent = value === "off" ? "Saved. BEK is off."
+      : "Saved. BEK is calculated automatically for each exam file.";
+    await refresh();
+  } catch (error) {
+    bekVersion.value = savedBekVersion;
+    bekStatus.textContent = `Not saved: ${error.message}`;
+  } finally {
+    bekVersion.disabled = false;
+  }
+});
+
+async function refreshBekSettings() {
+  const response = await browser.runtime.sendMessage({ type: "SEB_GET_BEK_SETTINGS" });
+  if (!response?.ok) throw new Error(response?.error || "Could not load the BEK version.");
+  const settings = response.settings;
+  if (settings.enabled && settings.mode === "provided") {
+    // The 2.4 selector replaces the old manual-key workflow with automatic calculation.
+    const migrated = await browser.runtime.sendMessage({
+      type: "SEB_SET_BEK_SETTINGS", settings: bekSettingsForVersion("3.10.2.920")
+    });
+    if (!migrated?.ok) throw new Error(migrated?.error || "Could not update the saved BEK settings.");
+    Object.assign(settings, migrated.settings);
+  }
+  savedBekVersion = settings.enabled ? settings.buildVersion : "off";
+  bekVersion.value = savedBekVersion;
+  if (!bekVersion.value) {
+    bekVersion.value = "off";
+    bekStatus.textContent = "This saved version is unsupported. Choose SEB 3.10.2.920 to calculate BEK automatically.";
+  } else {
+    bekStatus.textContent = settings.enabled ? "Calculated automatically for each exam file." : "BEK is off.";
+  }
+}
 
 let currentState = {};
 let displaySaveQueue = Promise.resolve();
@@ -36,28 +94,55 @@ elements.passwordForm.addEventListener("submit", async (event) => {
   elements.password.value = "";
   elements.password.disabled = true;
 
-  await browser.runtime.sendMessage({ type: "SEB_UNLOCK", password });
-  elements.password.disabled = false;
-  await refresh();
-  elements.password.focus();
+  try {
+    const response = await browser.runtime.sendMessage({ type: "SEB_UNLOCK", password });
+    if (!response?.ok && response?.error) throw new Error(response.error);
+    await refresh();
+  } catch (error) {
+    elements.message.textContent = `Could not open this file: ${error.message}`;
+  } finally {
+    elements.password.disabled = false;
+    if (!elements.passwordForm.hidden) elements.password.focus();
+  }
+});
+
+document.querySelector("#openFileButton").hidden = standaloneImport;
+document.querySelector("#filePickerLabel").hidden = !standaloneImport;
+document.querySelector("#openFileButton").addEventListener("click", async () => {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    const url = new URL(browser.runtime.getURL("popup.html"));
+    url.searchParams.set("file", "1");
+    if (Number.isInteger(tab?.id)) url.searchParams.set("target", String(tab.id));
+    await browser.tabs.create({ url: url.href });
+    window.close();
+  } catch (error) {
+    elements.message.textContent = `Could not open the file picker: ${error.message}`;
+  }
 });
 
 elements.fileInput.addEventListener("change", async () => {
   const file = elements.fileInput.files?.[0];
   if (!file) return;
-  const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-  await browser.runtime.sendMessage({
-    type: "SEB_PROCESS_BYTES",
-    bytes,
-    filename: file.name,
-    source: "selected file"
-  });
-  elements.fileInput.value = "";
-  await refresh();
+  elements.fileInput.disabled = true;
+  elements.message.textContent = `Opening ${file.name}…`;
+  try {
+    await importSelectedFile(file, request => browser.runtime.sendMessage(request),
+      standaloneImport && Number.isInteger(importTarget) && importTarget > 0 ? importTarget : undefined);
+    await refresh();
+  } catch (error) {
+    elements.statusPill.textContent = "Error";
+    elements.statusPill.className = "pill error";
+    elements.message.textContent = `Could not open ${file.name}: ${error.message}`;
+  } finally {
+    elements.fileInput.disabled = false;
+    elements.fileInput.value = "";
+  }
 });
 
 elements.headerDemoButton.addEventListener("click", async () => {
   elements.headerDemoButton.disabled = true;
+  let headerError;
   try {
     if (currentState.headerDemo?.enabled) {
       await browser.runtime.sendMessage({ type: "SEB_HEADER_DISABLE" });
@@ -67,10 +152,11 @@ elements.headerDemoButton.addEventListener("click", async () => {
       if (!response.ok) throw new Error(response.error);
     }
   } catch (error) {
-    elements.headerDemoMessage.textContent = error.message;
+    headerError = error.message;
   } finally {
     elements.headerDemoButton.disabled = false;
     await refresh();
+    if (headerError) elements.headerDemoMessage.textContent = headerError;
   }
 });
 
@@ -95,6 +181,8 @@ elements.unloadButton.addEventListener("click", async () => {
   await refresh();
 });
 
+elements.closeTabOnQuit.addEventListener("change", saveDisplaySettings);
+elements.checkDownloadsForSeb.addEventListener("change", saveDisplaySettings);
 elements.showStartupAnimation.addEventListener("change", saveDisplaySettings);
 elements.taskbarMode.addEventListener("change", saveDisplaySettings);
 elements.taskbarScale.addEventListener("change", saveDisplaySettings);
@@ -114,12 +202,16 @@ browser.storage.onChanged.addListener((changes, area) => {
 
 async function refresh() {
   const response = await browser.runtime.sendMessage({ type: "SEB_GET_STATE" });
+  if (!response?.ok) throw new Error(response?.error || "Could not read the exam status.");
   render(response.state);
 }
 
 async function refreshSettings() {
   const response = await browser.runtime.sendMessage({ type: "SEB_GET_SETTINGS" });
-  const settings = response?.settings || {};
+  if (!response?.ok) throw new Error(response?.error || "Could not read your settings.");
+  const settings = response.settings;
+  elements.closeTabOnQuit.checked = settings.closeTabOnQuit !== false;
+  elements.checkDownloadsForSeb.checked = settings.checkDownloadsForSeb !== false;
   elements.showStartupAnimation.checked = settings.showStartupAnimation !== false;
   elements.taskbarMode.value = ["auto", "show", "hide"].includes(settings.taskbarMode) ? settings.taskbarMode : "auto";
   if (document.activeElement !== elements.taskbarScale) {
@@ -131,11 +223,16 @@ async function saveDisplaySettings() {
   const scale = Number(elements.taskbarScale.value);
   if (!Number.isFinite(scale) || scale < 50 || scale > 300) return;
   const settings = {
+    checkDownloadsForSeb: elements.checkDownloadsForSeb.checked,
+    closeTabOnQuit: elements.closeTabOnQuit.checked,
     showStartupAnimation: elements.showStartupAnimation.checked,
     taskbarMode: elements.taskbarMode.value,
     taskbarScale: scale
   };
-  elements.taskbarScaleStatus.textContent = "Saving…";
+  const statusElement = document.activeElement === elements.checkDownloadsForSeb
+    ? elements.downloadCheckStatus : document.activeElement === elements.closeTabOnQuit
+      ? elements.quitSettingStatus : elements.taskbarScaleStatus;
+  statusElement.textContent = "Saving…";
   displaySaveQueue = displaySaveQueue.catch(() => {}).then(async () => {
     const response = await browser.runtime.sendMessage({ type: "SEB_SET_SETTINGS", settings });
     if (!response?.ok) throw new Error(response?.error || "Could not save settings.");
@@ -143,18 +240,14 @@ async function saveDisplaySettings() {
   });
   try {
     const response = await displaySaveQueue;
-    // Persist the complete snapshot here as well. This keeps the value safe even if a stale
-    // persistent MV2 background page responds without the newly added scale property.
-    await browser.storage.local.set({ [SETTINGS_KEY]: settings });
+    // The background owns persistence; do not overwrite a newer snapshot from the popup.
     if (Number(elements.taskbarScale.value) === scale) {
-      const confirmedScale = validTaskbarScale(response?.settings?.taskbarScale)
-        ? Number(response.settings.taskbarScale)
-        : scale;
-      elements.taskbarScale.value = confirmedScale;
-      elements.taskbarScaleStatus.textContent = `Saved at ${confirmedScale}%.`;
+      elements.taskbarScale.value = response.settings.taskbarScale;
     }
+    statusElement.textContent = "Saved.";
   } catch (error) {
-    elements.taskbarScaleStatus.textContent = `Not saved: ${error.message}`;
+    statusElement.textContent = `Not saved: ${error.message}`;
+    await refreshSettings();
     displaySaveQueue = Promise.resolve();
   }
 }
@@ -167,9 +260,9 @@ function validTaskbarScale(value) {
 function render(state = {}) {
   currentState = state;
   const status = state.status || "idle";
-  elements.statusPill.textContent = status.replace("-", " ");
+  elements.statusPill.textContent = ({ idle: "Ready", ready: "Exam loaded", downloading: "Opening…", "password-needed": "Password needed", error: "Needs attention" })[status] || status;
   elements.statusPill.className = `pill ${status}`;
-  elements.message.textContent = state.message || "Waiting for a SEB download or launch link.";
+  elements.message.textContent = (status === "idle" ? "Ready when you are." : state.message) || "Ready when you are.";
 
   const hasMetadata = Boolean(state.filename || state.mode || state.sourceUrl);
   elements.metadata.hidden = !hasMetadata;
@@ -189,10 +282,12 @@ function render(state = {}) {
   const demo = state.headerDemo || {};
   elements.headerDemoPill.textContent = demo.enabled ? `Enabled · ${demo.attachedTabs} tab${demo.attachedTabs === 1 ? "" : "s"}` : "Disabled";
   elements.headerDemoPill.className = `pill ${demo.enabled ? "ready" : "idle"}`;
-  elements.headerDemoButton.textContent = demo.enabled ? "Disable SEB headers" : "Enable SEB headers";
+  elements.headerDemoButton.textContent = demo.enabled ? "Disconnect" : "Connect";
   elements.headerDemoMessage.textContent = demo.error
     ? demo.error
-    : "Applies the SEB User-Agent and calculated ConfigKeyHash to HTTP and HTTPS requests on all domains.";
+    : demo.enabled
+      ? `Exam origin: ${demo.examOrigin}. Build: ${demo.buildVersion}. CK enabled. BEK: ${demo.bekMode === "provided" ? "configured key" : demo.bekMode === "automatic" ? "calculated automatically" : demo.bekMode === "missing-key" ? "missing — paste your quiz's allowed BEK" : "disabled"}. Requests with BEK: ${demo.requestsWithBek || 0}.`
+      : "Sends CK and BEK responses to the configured exam origin.";
 }
 
 function formatMode(mode) {
@@ -217,4 +312,8 @@ function formatXml(xml) {
   }).join("\n");
 }
 
-Promise.all([refresh(), refreshSettings()]);
+Promise.all([refresh(), refreshSettings(), refreshBekSettings()]).catch(error => {
+  elements.statusPill.textContent = "Needs attention";
+  elements.statusPill.className = "pill error";
+  elements.message.textContent = `Could not load settings: ${error.message}. Reload the extension and try again.`;
+});

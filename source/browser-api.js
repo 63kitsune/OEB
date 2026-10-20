@@ -46,10 +46,14 @@
       onRemoved: chrome.tabs.onRemoved,
       onUpdated: chrome.tabs.onUpdated,
       query(queryInfo) { return invoke(chrome.tabs, "query", queryInfo); },
+      create(createProperties) { return invoke(chrome.tabs, "create", createProperties); },
       get(tabId) { return invoke(chrome.tabs, "get", tabId); },
       reload(tabId, reloadProperties) { return invoke(chrome.tabs, "reload", tabId, reloadProperties); },
       remove(tabIds) { return invoke(chrome.tabs, "remove", tabIds); },
-      sendMessage(tabId, message) { return invoke(chrome.tabs, "sendMessage", tabId, message); },
+      sendMessage(tabId, message, options) {
+        return options ? invoke(chrome.tabs, "sendMessage", tabId, message, options)
+          : invoke(chrome.tabs, "sendMessage", tabId, message);
+      },
       update(tabId, updateProperties) { return invoke(chrome.tabs, "update", tabId, updateProperties); }
     },
     commands: chrome.commands && {

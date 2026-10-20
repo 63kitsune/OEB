@@ -15,7 +15,18 @@ export async function calculateRequestConfigKey(url, configHash) {
 }
 
 export function calculateRequestConfigKeySync(url, configHash) {
-  return sha256HexSync(url + configHash);
+  return sha256HexSync(url.split("#", 1)[0] + configHash);
+}
+
+export function getSebExamSalt(xml) {
+  const root = parsePlist(xml);
+  if (!isDictionary(root)) throw new Error("The SEB plist root must be a dictionary.");
+  const value = root.examKeySalt;
+  if (value === undefined || value === "") return new Uint8Array();
+  if (typeof value !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    throw new Error("The examKeySalt must contain valid base64 data.");
+  }
+  return Uint8Array.from(atob(value), character => character.charCodeAt(0));
 }
 
 export function getSebStartUrl(xml) {
@@ -77,6 +88,21 @@ function parsePlist(xml) {
   function peek() {
     while (position < tokens.length && isIgnorable(tokens[position])) position += 1;
     return tokens[position];
+  }
+
+  // Browser XML viewers may append empty script nodes and OEB's own frames when
+  // copying the rendered document. Recognize only these inert root-level nodes.
+  function skipViewerArtifacts() {
+    for (;;) {
+      const tag = parseTag(peek());
+      const emptyScript = tag?.name === "script" && !tag.closing && /^<script\s*\/?>$/i.test(peek());
+      const ownFrame = tag?.name === "iframe" && !tag.closing
+        && /\bid\s*=\s*["']seb-local-(?:startup|taskbar|quit)-frame["']/i.test(peek())
+        && !/\b(?:src|srcdoc|on\w+)\s*=/i.test(peek());
+      if (!emptyScript && !ownFrame) return;
+      take();
+      if (!tag.selfClosing) expectClosing(tag.name);
+    }
   }
 
   function take() {
@@ -168,7 +194,9 @@ function parsePlist(xml) {
   if (!plistTag || plistTag.name !== "plist" || plistTag.closing) {
     throw new Error("The file is not an XML plist.");
   }
+  skipViewerArtifacts();
   const root = parseValue();
+  skipViewerArtifacts();
   expectClosing("plist");
   return root === EMPTY_COLLECTION ? {} : root;
 }

@@ -407,7 +407,11 @@ function openAiHeaders(account, definition) {
 }
 
 function anthropicHeaders(key) {
-  return { "x-api-key": key, "anthropic-version": "2023-06-01" };
+  return {
+    "x-api-key": key,
+    "anthropic-version": "2023-06-01",
+    "anthropic-dangerous-direct-browser-access": "true"
+  };
 }
 
 async function requestJson(url, options = {}) {

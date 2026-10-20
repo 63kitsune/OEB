@@ -13,12 +13,32 @@ import {
   verifySebQuitPassword
 } from "./config-key.js";
 import { answerTab, installAssistantCommands } from "../assistant/background.js";
+import { DEFAULT_BEK_SETTINGS, normalizeBekSettings } from "./browser-exam-key.js";
+import { isSebConfigurationUrl, classifySebResponse } from "./launch-response.js";
+
+import { SETTINGS_KEY, DEFAULT_SETTINGS, normalizeSettings } from "./settings.js";
+import { shouldProbeDownload, probeSebDownload, containsSebConfiguration } from "./download-check.js";
+
+import { mirrorDownloadResponse, isExtensionlessResponse } from "./download-stream.js";
+
+const BEK_SETTINGS_KEY = "oebBekSettings";
 
 const STATE_KEY = "sebInspectorState";
 const PENDING_KEY = "sebInspectorPending";
-const SETTINGS_KEY = "sebInspectorSettings";
-const DEFAULT_SETTINGS = Object.freeze({ showStartupAnimation: true, taskbarMode: "auto", taskbarScale: 100 });
+let automaticDownloads = false;
+const settingsReady = loadSettings().then(settings => { automaticDownloads = settings.checkDownloadsForSeb; });
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes[SETTINGS_KEY]) {
+    automaticDownloads = normalizeSettings(changes[SETTINGS_KEY].newValue).checkDownloadsForSeb;
+  }
+});
 const duplicateRequests = new Map();
+const inFlightCaptures = new Map();
+const inFlightProbes = new Map();
+const automaticCaptures = new Map();
+let loadedBytesDigest;
+const responseCaptures = new Map();
+const sebResponseRequests = new Set();
 const pageTransitions = new Map();
 const presentationTabs = new Set();
 
@@ -42,31 +62,73 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
-browser.downloads.onCreated.addListener((item) => {
+browser.downloads.onCreated.addListener(async (item) => {
+  await settingsReady;
+  if (!automaticDownloads) return;
   const url = item.finalUrl || item.url;
+  const mirrored = responseCaptures.get(url);
+  if (mirrored && await mirrored) return;
   if (isSebUrl(url) || item.filename?.toLowerCase().endsWith(".seb") || isSebMime(item.mime)) {
-    processUrl(url, {
+    await processUrl(url, {
       source: "browser download",
       autoLaunch: true,
       filename: fileNameFromPath(item.filename) || fileNameFromUrl(url)
+    });
+  } else if (/^https?:\/\//i.test(url || "")) {
+    // Download requests can have tabId -1 and arbitrary names/MIME types. The
+    // browser download event is the fallback when the response hook cannot help.
+    await inspectUnknownDownload({ url, type: "download", tabId: item.tabId }, false, {
+      source: "browser download content check",
+      filename: fileNameFromPath(item.filename) || fileNameFromUrl(url),
+      pageUrl: item.referrer
     });
   }
 });
 
 browser.webRequest.onHeadersReceived.addListener(
   (details) => {
-    if (details.tabId < 0) return;
+    const extensionRoot = browser.runtime.getURL?.("");
+    if (extensionRoot && [details.originUrl, details.documentUrl, details.initiator]
+      .some(value => value?.startsWith(extensionRoot))) return;
+    if (details.tabId < 0 && !browser.webRequest.filterResponseData) return;
+    // Firefox supports an asynchronous blocking response. Chromium requires a synchronous one.
+    if (browser.runtime.getBrowserInfo) return settingsReady.then(() => inspectDownloadResponse(details, true));
+    return inspectDownloadResponse(details, false);
+  },
+  { urls: ["<all_urls>"] },
+  ["blocking", "responseHeaders"]
+);
 
-    const headers = Object.fromEntries(
-      (details.responseHeaders || []).map((header) => [header.name.toLowerCase(), header.value || ""])
-    );
-    const disposition = headers["content-disposition"] || "";
-    const mime = (headers["content-type"] || "").split(";", 1)[0];
-    const sebResponse = isSebUrl(details.url)
-      || /filename\*?\s*=.*\.seb(?:["';]|$)/i.test(disposition)
-      || isSebMime(mime);
+function inspectDownloadResponse(details, canWait) {
+    if (!automaticDownloads) return {};
+    if (browser.webRequest.filterResponseData && isExtensionlessResponse(details)) {
+      try {
+        const filter = browser.webRequest.filterResponseData(details.requestId);
+        const pending = mirrorDownloadResponse(filter, async bytes => {
+          if (!automaticDownloads || !await containsSebConfiguration(bytes)) return false;
+          return captureAutomaticBytes(bytes, details);
+        });
+        responseCaptures.set(details.url, pending);
+        // Retain the completed decision briefly for a late downloads.onCreated event.
+        pending.finally(() => {
+          const timer = setTimeout(() => {
+            if (responseCaptures.get(details.url) === pending) responseCaptures.delete(details.url);
+          }, 8000);
+          timer.unref?.();
+        });
+        return {};
+      } catch { /* Fall back to the browser download probe. */ }
+    }
+    if (details.tabId < 0) return {};
 
-    if (sebResponse) {
+    const { recognized, consume, disposition } = classifySebResponse({
+      ...details, knownSebRequest: sebResponseRequests.has(details.requestId)
+    });
+    if (recognized && details.statusCode >= 300 && details.statusCode < 400) {
+      sebResponseRequests.add(details.requestId);
+    }
+
+    if (recognized && details.statusCode >= 200 && details.statusCode < 300) {
       processUrl(details.url, {
         source: "SEB response",
         tabId: details.tabId,
@@ -74,10 +136,71 @@ browser.webRequest.onHeadersReceived.addListener(
         filename: fileNameFromDisposition(disposition) || fileNameFromUrl(details.url)
       });
     }
-  },
-  { urls: ["<all_urls>"] },
-  ["responseHeaders"]
-);
+    if (!recognized && shouldProbeDownload(details)) {
+      const probe = inspectUnknownDownload(details, canWait);
+      return canWait ? probe : {};
+    }
+    return consume ? { cancel: true } : {};
+}
+
+async function probeDownloadOnce(url, tabId) {
+  if (inFlightProbes.has(url)) return inFlightProbes.get(url);
+  const pending = (async () => {
+    // Use the originating page's authenticated session before the background fallback.
+    const tabs = await browser.tabs.query({});
+    const tab = tabs.find(tab => tab.id === tabId) || tabs.find(tab => tab.active && isWebUrl(tab.url))
+      || tabs.find(tab => presentationTabs.has(tab.id) && isWebUrl(tab.url));
+    if (tab) {
+      try {
+        const response = await browser.tabs.sendMessage(tab.id, { type: "SEB_PROBE_DOWNLOAD_URL", url }, { frameId: 0 });
+        if (Array.isArray(response?.bytes) && response.bytes.length <= 8 * 1024 * 1024) {
+          const bytes = new Uint8Array(response.bytes);
+          return await containsSebConfiguration(bytes) ? bytes : null;
+        }
+      } catch { /* The page may not have the new content script until reloaded. */ }
+    }
+    return probeSebDownload(url);
+  })();
+  inFlightProbes.set(url, pending);
+  try { return await pending; }
+  finally { inFlightProbes.delete(url); }
+}
+
+async function inspectUnknownDownload(details, canWait, metadata = {}) {
+  const bytes = await probeDownloadOnce(details.url, details.tabId);
+  if (!bytes || !automaticDownloads) return {};
+  const accepted = await captureAutomaticBytes(bytes, details, metadata);
+  return accepted && canWait && ["main_frame", "sub_frame"].includes(details.type) ? { cancel: true } : {};
+}
+
+async function digestBytes(bytes) {
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+    value => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function captureAutomaticBytes(bytes, details, metadata = {}) {
+  try {
+    const parsed = await inspectSebFile(bytes);
+    if (parsed.status === "ready") await calculateSebConfigHash(parsed.xml);
+  } catch { return false; }
+  const digest = await digestBytes(bytes);
+  const key = `${details.url}:${digest}`;
+  if (automaticCaptures.has(key)) return automaticCaptures.get(key);
+  const state = await loadState();
+  // Deduplicate only the currently loaded bytes. A -> B -> A must always load A again.
+  if (loadedBytesDigest === digest && ["ready", "password-needed"].includes(state.status)) return true;
+  const pending = processBytes(bytes, {
+    source: "automatic download check", sourceUrl: details.url,
+    tabId: details.tabId, autoLaunch: true, filename: fileNameFromUrl(details.url), ...metadata
+  }).then(result => result !== false);
+  automaticCaptures.set(key, pending);
+  try { return await pending; }
+  finally { if (automaticCaptures.get(key) === pending) automaticCaptures.delete(key); }
+}
+
+for (const event of [browser.webRequest.onCompleted, browser.webRequest.onErrorOccurred]) {
+  event.addListener(details => sebResponseRequests.delete(details.requestId), { urls: ["<all_urls>"] });
+}
 
 async function handleMessage(request, sender) {
   switch (request?.type) {
@@ -93,20 +216,55 @@ async function handleMessage(request, sender) {
         method: request.method,
         body: request.body
       });
-      return { ok: true };
-    case "SEB_PROCESS_BYTES":
+      const captured = await loadState();
+      return { ok: captured.status !== "error", state: captured,
+        error: captured.status === "error" ? captured.message : undefined };
+    case "SEB_CHECK_DOWNLOAD_BYTES": {
+      await settingsReady;
+      if (!automaticDownloads || !Array.isArray(request.bytes) || request.bytes.length > 8 * 1024 * 1024) {
+        return { ok: true, recognized: false };
+      }
+      const bytes = new Uint8Array(request.bytes);
+      try {
+        if (!await containsSebConfiguration(bytes)) return { ok: true, recognized: false };
+        const parsed = await inspectSebFile(bytes);
+        if (parsed.status === "ready") await calculateSebConfigHash(parsed.xml);
+      } catch { return { ok: true, recognized: false }; }
+      const accepted = await captureAutomaticBytes(bytes, { url: request.sourceUrl || "page download", tabId: sender.tab?.id }, {
+        source: "page download", filename: request.filename || "download", pageUrl: sender.tab?.url || request.pageUrl });
+      const state = await loadState();
+      return { ok: accepted, recognized: true, state,
+        error: state.status === "error" ? state.message : undefined };
+    }
+    case "SEB_PROCESS_BYTES": {
       await processBytes(new Uint8Array(request.bytes), {
         source: request.source || "selected file",
         filename: request.filename || "configuration.seb",
+        tabId: Number.isInteger(request.tabId) ? request.tabId : sender.tab?.id,
         autoLaunch: true
       });
-      return { ok: true };
+      const state = await loadState();
+      return { ok: state.status !== "error", state,
+        error: state.status === "error" ? state.message : undefined };
+    }
     case "SEB_UNLOCK":
       return unlockPending(request.password);
     case "SEB_GET_STATE":
       return { ok: true, state: withHeaderDemo(await loadState()) };
     case "SEB_GET_SETTINGS":
       return { ok: true, settings: await loadSettings() };
+    case "SEB_GET_BEK_SETTINGS":
+      return { ok: true, settings: await loadBekSettings() };
+    case "SEB_SET_BEK_SETTINGS": {
+      const settings = normalizeBekSettings(request.settings);
+      if (settings.enabled && settings.mode === "provided" && !settings.browserExamKey) {
+        throw new Error("Paste a BEK or choose automatic calculation.");
+      }
+      const state = await loadState();
+      if (getHeaderStatus().enabled && state.status === "ready") await enableLoadedHeaders(state.xml, settings);
+      await browser.storage.local.set({ [BEK_SETTINGS_KEY]: settings });
+      return { ok: true, settings };
+    }
     case "SEB_SET_SETTINGS": {
       const settings = await saveSettings(request.settings || {});
       await broadcastPresentation(settings);
@@ -151,12 +309,15 @@ async function handleMessage(request, sender) {
       if (!await verifySebQuitPassword(state.xml, request.password || "")) {
         return { ok: false, error: "Incorrect quit password." };
       }
-      await unloadConfiguration({ closeTabs: true });
+      await unloadConfiguration({ closeTabs: (await loadSettings()).closeTabOnQuit });
       return { ok: true };
     }
-    case "SEB_HEADER_ENABLE":
-      await enableHeaderInjection(request.configHash);
+    case "SEB_HEADER_ENABLE": {
+      const state = await loadState();
+      if (state.status !== "ready") throw new Error("Load a SEB configuration first.");
+      await enableLoadedHeaders(state.xml);
       return { ok: true, headerDemo: await reloadActiveHeaderTab() };
+    }
     case "SEB_HEADER_DISABLE":
       return { ok: true, headerDemo: await disableHeaderInjection() };
     case "SEB_UNLOAD":
@@ -171,6 +332,17 @@ async function handleMessage(request, sender) {
 }
 
 async function processUrl(originalUrl, metadata = {}) {
+  if (inFlightCaptures.has(originalUrl)) return inFlightCaptures.get(originalUrl);
+  const pending = processUrlOnce(originalUrl, metadata);
+  inFlightCaptures.set(originalUrl, pending);
+  try {
+    return await pending;
+  } finally {
+    inFlightCaptures.delete(originalUrl);
+  }
+}
+
+async function processUrlOnce(originalUrl, metadata = {}) {
   let embedded;
   try {
     embedded = decodeEmbeddedSebUrl(originalUrl);
@@ -200,11 +372,6 @@ async function processUrl(originalUrl, metadata = {}) {
     return;
   }
 
-  const now = Date.now();
-  const previous = duplicateRequests.get(url) || 0;
-  if (now - previous < 8_000) return;
-  duplicateRequests.set(url, now);
-
   await saveState({
     status: "downloading",
     sourceUrl: url,
@@ -219,7 +386,8 @@ async function processUrl(originalUrl, metadata = {}) {
       method: metadata.method || "GET",
       credentials: "include",
       redirect: "follow",
-      cache: "no-store"
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000)
     };
     if (options.method === "POST" && metadata.body) {
       options.headers = { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" };
@@ -241,17 +409,30 @@ async function processUrl(originalUrl, metadata = {}) {
       sourceUrl: url,
       filename: metadata.filename || fileNameFromUrl(url),
       detectedAt: new Date().toISOString(),
-      message: `Could not retrieve the detected file: ${error.message}`
+      message: error.name === "TimeoutError"
+        ? "The configuration download timed out. Check the link and your connection, then try again."
+        : `Could not retrieve the detected file: ${error.message}`
     });
     setBadge("!", "#dc2626");
   }
 
 }
 
-async function processBytes(bytes, metadata) {
-  await disableHeaderInjection();
+let configurationQueue = Promise.resolve();
+function processBytes(bytes, metadata) {
+  const pending = configurationQueue.catch(() => {}).then(() => replaceConfiguration(bytes, metadata));
+  configurationQueue = pending;
+  return pending;
+}
+
+async function replaceConfiguration(bytes, metadata) {
   try {
     const result = await inspectSebFile(bytes);
+    if (result.status === "ready") await calculateSebConfigHash(result.xml);
+    // Unload the old exam before overwriting its state, including its overlay,
+    // transitions and pending password. This also works when an exam is already loaded.
+    await unloadConfiguration();
+    loadedBytesDigest = await digestBytes(bytes);
     if (result.status === "password-needed") {
       await browser.storage.session.set({
         [PENDING_KEY]: { bytes: Array.from(bytes), metadata, mode: result.mode }
@@ -265,7 +446,7 @@ async function processBytes(bytes, metadata) {
         message: result.message
       });
       setBadge("?", "#d97706");
-      return;
+      return true;
     }
 
     await browser.storage.session.remove(PENDING_KEY);
@@ -280,6 +461,7 @@ async function processBytes(bytes, metadata) {
     });
     setBadge("✓", "#16a34a");
     if (metadata.autoLaunch) await activateLaunch(result.xml, metadata);
+    return true;
   } catch (error) {
     await saveState({
       status: "error",
@@ -290,6 +472,7 @@ async function processBytes(bytes, metadata) {
       message: error.message
     });
     setBadge("!", "#dc2626");
+    return false;
   }
 }
 
@@ -372,7 +555,7 @@ async function activateLaunch(xml, metadata) {
   const settings = buildPresentationSettings(await loadSettings(), xml);
   const targetTab = await findTargetTab(metadata.tabId);
   if (!targetTab) throw new Error("Open an HTTP or HTTPS page before loading the SEB configuration.");
-  await enableHeaderInjection(configHash);
+  await enableHeaderInjection(configHash, { xml, origin: destination, settings: await loadBekSettings() });
   await broadcastMessage({ type: "SEB_UNLOAD_PRESENTATION" });
   presentationTabs.clear();
   presentationTabs.add(targetTab.id);
@@ -418,6 +601,7 @@ async function beginPendingReload(tabId) {
 async function unloadConfiguration({ closeTabs = false, reloadTabs = false } = {}) {
   const state = await loadState();
   const targetTabIds = [...presentationTabs];
+  loadedBytesDigest = undefined;
   if (state.cmid) {
     await Promise.all(targetTabIds.map((tabId) => browser.tabs.sendMessage(tabId, {
       type: "SEB_RESET_MOODLE_ACCESS",
@@ -440,28 +624,31 @@ async function unloadConfiguration({ closeTabs = false, reloadTabs = false } = {
 
 async function loadSettings() {
   const stored = await browser.storage.local.get(SETTINGS_KEY);
-  const saved = stored[SETTINGS_KEY] || {};
-  const legacyMode = typeof saved.showSebBar === "boolean" ? (saved.showSebBar ? "auto" : "hide") : undefined;
-  return {
-    showStartupAnimation: saved.showStartupAnimation !== false,
-    taskbarMode: ["auto", "show", "hide"].includes(saved.taskbarMode) ? saved.taskbarMode : legacyMode || "auto",
-    taskbarScale: normalizeTaskbarScale(saved.taskbarScale)
-  };
+  return normalizeSettings(stored[SETTINGS_KEY]);
+}
+
+async function loadBekSettings() {
+  const stored = await browser.storage.local.get(BEK_SETTINGS_KEY);
+  const saved = stored[BEK_SETTINGS_KEY];
+  if (saved && saved.schemaVersion !== 2 && saved.mode === "provided" && !saved.browserExamKey) {
+    return normalizeBekSettings({ ...saved, mode: "automatic" });
+  }
+  return normalizeBekSettings(saved || DEFAULT_BEK_SETTINGS);
+}
+
+async function enableLoadedHeaders(xml, settings) {
+  return enableHeaderInjection(await calculateSebConfigHash(xml), {
+    xml,
+    origin: getSebStartUrl(xml),
+    settings: settings || await loadBekSettings()
+  });
 }
 
 async function saveSettings(next) {
-  const settings = {
-    showStartupAnimation: next.showStartupAnimation !== false,
-    taskbarMode: ["auto", "show", "hide"].includes(next.taskbarMode) ? next.taskbarMode : "auto",
-    taskbarScale: normalizeTaskbarScale(next.taskbarScale)
-  };
+  const settings = normalizeSettings({ ...await loadSettings(), ...next });
+  automaticDownloads = settings.checkDownloadsForSeb;
   await browser.storage.local.set({ [SETTINGS_KEY]: settings });
   return settings;
-}
-
-function normalizeTaskbarScale(value) {
-  const scale = Number(value);
-  return Number.isFinite(scale) ? Math.max(50, Math.min(300, Math.round(scale))) : 100;
 }
 
 async function broadcastPresentation(settings) {
@@ -514,7 +701,7 @@ function normalizeSebUrl(value) {
 }
 
 function isSebUrl(value = "") {
-  return /^(?:sebs?):\/\//i.test(value) || /(?:^|[/?=&])[^/?=&]*\.seb(?:$|[?#&])/i.test(value);
+  return isSebConfigurationUrl(value);
 }
 
 function isSebMime(value = "") {
