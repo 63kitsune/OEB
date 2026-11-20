@@ -3,12 +3,20 @@ const SEB_FILE = /(?:^|[/?=&])[^/?=&]*\.seb(?:$|[?#&])/i;
 const STARTUP_FRAME_ID = "seb-local-startup-frame";
 const TASKBAR_FRAME_ID = "seb-local-taskbar-frame";
 const QUIT_FRAME_ID = "seb-local-quit-frame";
+const QUIT_BLACKOUT_ID = "seb-local-quit-blackout";
+const PENDING_CAPTURE_KEY = "oeb-pending-seb-capture-v1";
 const IS_TOP_FRAME = window === window.top;
 let cancelStartup;
+let hoveredCursorElement;
+let cursorProbeActive = false;
 let presentationSettings = { showStartupAnimation: true, taskbarMode: "auto", taskbarScale: 100, config: { taskbar: {} } };
 
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (!IS_TOP_FRAME && request?.type?.startsWith("SEB_")) return false;
+  if (!IS_TOP_FRAME && request?.type?.startsWith("SEB_")) {
+    if (request.type === "SEB_APPLY_PRESENTATION") setDefaultCursor(request.settings?.defaultWindowsCursor);
+    if (request.type === "SEB_UNLOAD_PRESENTATION") setDefaultCursor(false);
+    return false;
+  }
   switch (request?.type) {
     case "SEB_SHOW_STARTUP":
       showStartup(request.settings || {});
@@ -20,6 +28,45 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break;
     case "SEB_UNLOAD_PRESENTATION":
       removePresentation();
+      sendResponse({ ok: true });
+      break;
+    case "SEB_BEGIN_QUIT_BLACKOUT": {
+      document.documentElement.setAttribute("data-oeb-quit-blackout", request.showCursor ? "show" : "hide");
+      let blackoutStyle = document.getElementById("oeb-quit-blackout-style");
+      if (!blackoutStyle) {
+        blackoutStyle = document.createElement("style");
+        blackoutStyle.id = "oeb-quit-blackout-style";
+        blackoutStyle.textContent = `
+          html[data-oeb-quit-blackout="hide"],
+          html[data-oeb-quit-blackout="hide"] * { cursor: none !important; }
+          html[data-oeb-quit-blackout="show"],
+          html[data-oeb-quit-blackout="show"] * { cursor: default !important; }
+        `;
+        document.documentElement.append(blackoutStyle);
+      }
+      let blackout = document.getElementById(QUIT_BLACKOUT_ID);
+      if (!blackout) {
+        blackout = document.createElement("div");
+        blackout.id = QUIT_BLACKOUT_ID;
+        blackout.setAttribute("aria-hidden", "true");
+        blackout.style.cssText = "position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;background:#000!important;z-index:2147483647!important;";
+        document.documentElement.append(blackout);
+      }
+      blackout.style.setProperty("cursor", request.showCursor ? "default" : "none", "important");
+      let answered = false;
+      const acknowledge = () => {
+        if (answered) return;
+        answered = true;
+        sendResponse({ ok: true });
+      };
+      requestAnimationFrame(() => setTimeout(acknowledge, 0));
+      setTimeout(acknowledge, 150);
+      return true;
+    }
+    case "SEB_END_QUIT_BLACKOUT":
+      document.getElementById(QUIT_BLACKOUT_ID)?.remove();
+      document.getElementById("oeb-quit-blackout-style")?.remove();
+      document.documentElement.removeAttribute("data-oeb-quit-blackout");
       sendResponse({ ok: true });
       break;
     case "SEB_RESET_MOODLE_ACCESS":
@@ -103,7 +150,7 @@ function isSebUrl(url) {
   } catch { return false; }
 }
 
-async function sendUrl(url, source, method = "GET", body) {
+async function sendUrl(url, source, method = "GET", body, canRecover = true) {
   showLinkStatus("Loading the SEB configuration…");
   try {
     const response = await browser.runtime.sendMessage({
@@ -122,8 +169,28 @@ async function sendUrl(url, source, method = "GET", body) {
       document.getElementById("oeb-seb-link-status")?.remove();
     }
   } catch (error) {
+    if (canRecover && /extension context (?:has been |was )?invalidated/i.test(error?.message || "")) {
+      try {
+        sessionStorage.setItem(PENDING_CAPTURE_KEY, JSON.stringify({
+          url, source, method, body, pageUrl: location.href, savedAt: Date.now()
+        }));
+        location.reload();
+        return;
+      } catch { /* Show the error if this page blocks session storage or reload. */ }
+    }
     showLinkStatus(`Could not open the quiz: ${error.message}`, true);
   }
+}
+
+function resumePendingCapture() {
+  let pending;
+  try {
+    pending = JSON.parse(sessionStorage.getItem(PENDING_CAPTURE_KEY) || "null");
+    if (pending?.pageUrl === location.href) sessionStorage.removeItem(PENDING_CAPTURE_KEY);
+  } catch { return; }
+  if (!pending || pending.pageUrl !== location.href || Date.now() - pending.savedAt > 30_000) return;
+  if (typeof pending.url !== "string" || !isSebUrl(pending.url)) return;
+  sendUrl(pending.url, pending.source || "recovered page control", pending.method || "GET", pending.body, false);
 }
 
 function showLinkStatus(message, error = false) {
@@ -148,10 +215,17 @@ function showLinkStatus(message, error = false) {
 async function initializePresentation() {
   try {
     const response = await browser.runtime.sendMessage({ type: "SEB_GET_PAGE_PRESENTATION" });
-    if (!response?.ok || !response.presentation?.loaded) return;
+    if (!response?.ok) return;
+    if (!response.presentation?.loaded) {
+      if (response.presentation?.afterQuitCursor) setDefaultCursor(true);
+      return;
+    }
 
     await whenDocumentLoaded();
     applyPresentation(response.presentation.settings);
+    if (response.presentation.settings.fullscreenOnReload) {
+      browser.runtime.sendMessage({ type: "SEB_PAGE_READY" }).catch(() => {});
+    }
     if (response.presentation.afterReload) {
       browser.runtime.sendMessage({ type: "SEB_TRANSITION_FINISHED" }).catch(() => {});
     }
@@ -190,11 +264,110 @@ function showStartup(settings) {
 
 function applyPresentation(settings) {
   presentationSettings = { ...presentationSettings, ...settings };
+  setDefaultCursor(presentationSettings.defaultWindowsCursor);
   const taskbar = presentationSettings.config?.taskbar || {};
   const visible = presentationSettings.taskbarMode === "show" ||
     (presentationSettings.taskbarMode !== "hide" && taskbar.visible !== false);
   if (visible) showSebBar(taskbar, presentationSettings.taskbarScale);
   else document.getElementById(TASKBAR_FRAME_ID)?.remove();
+}
+
+function setDefaultCursor(enabled) {
+  let cursorStyle = document.getElementById("oeb-default-cursor-style");
+  if (enabled) {
+    if (!cursorStyle) {
+      cursorStyle = document.createElement("style");
+      cursorStyle.id = "oeb-default-cursor-style";
+      const hotspots = { arrow: [0, 0], beam: [8, 9], busy: [16, 16], cross: [16, 16],
+        ew: [11, 4], helpsel: [0, 0], link: [6, 0], move: [11, 11], nesw: [8, 8],
+        ns: [4, 11], nwse: [8, 8], unavail: [8, 8], working: [0, 8] };
+      const cursor = (name, fallback) =>
+        `cursor: url("${browser.runtime.getURL(`seb/icons/aero_${name}.png`)}") ${hotspots[name][0]} ${hotspots[name][1]}, ${fallback} !important`;
+      cursorStyle.textContent = `
+        html, body, body * { ${cursor("arrow", "default")}; }
+        p, span, label, li, td, th, h1, h2, h3, h4, h5, h6,
+        strong, em, small, b, i, blockquote, pre, code { ${cursor("beam", "text")}; }
+        textarea, input:not([type]), input[type="text"], input[type="search"],
+        input[type="email"], input[type="password"], input[type="url"], input[type="tel"],
+        input[type="number"], [contenteditable]:not([contenteditable="false"]), [role="textbox"],
+        :is([contenteditable]:not([contenteditable="false"]), [role="textbox"]) *
+          { ${cursor("beam", "text")}; }
+        a[href], area[href], button, select, summary, input[type="button"],
+        input[type="submit"], input[type="reset"], input[type="checkbox"],
+        input[type="radio"], [role="button"], [role="link"], [role="checkbox"],
+        [role="radio"], [role="option"], [onclick], [data-action], [tabindex="0"],
+        [style*="cursor: pointer"], [style*="cursor:pointer"],
+        :is(a[href], button, select, summary, [role="button"], [role="link"],
+          [role="option"], [onclick], [data-action], [tabindex="0"]) *
+          { ${cursor("link", "pointer")}; }
+        :disabled, [aria-disabled="true"], [style*="cursor: not-allowed"], [style*="cursor:not-allowed"]
+          { ${cursor("unavail", "not-allowed")}; }
+        [style*="cursor: move"], [style*="cursor:move"], [style*="cursor: grab"], [style*="cursor:grab"]
+          { ${cursor("move", "move")}; }
+        [style*="cursor: crosshair"], [style*="cursor:crosshair"]
+          { ${cursor("cross", "crosshair")}; }
+        [style*="cursor: help"], [style*="cursor:help"]
+          { ${cursor("helpsel", "help")}; }
+        [style*="cursor: wait"], [style*="cursor:wait"]
+          { ${cursor("busy", "wait")}; }
+        [style*="cursor: progress"], [style*="cursor:progress"]
+          { ${cursor("working", "progress")}; }
+        [style*="cursor: ns-resize"], [style*="cursor:ns-resize"]
+          { ${cursor("ns", "ns-resize")}; }
+        [style*="cursor: ew-resize"], [style*="cursor:ew-resize"]
+          { ${cursor("ew", "ew-resize")}; }
+        [style*="cursor: nesw-resize"], [style*="cursor:nesw-resize"]
+          { ${cursor("nesw", "nesw-resize")}; }
+        [style*="cursor: nwse-resize"], [style*="cursor:nwse-resize"]
+          { ${cursor("nwse", "nwse-resize")}; }
+        html body [data-oeb-cursor="pointer"] { ${cursor("link", "pointer")}; }
+        html body [data-oeb-cursor="text"] { ${cursor("beam", "text")}; }
+        html body [data-oeb-cursor="crosshair"] { ${cursor("cross", "crosshair")}; }
+        html body [data-oeb-cursor="move"] { ${cursor("move", "move")}; }
+        html body [data-oeb-cursor="not-allowed"] { ${cursor("unavail", "not-allowed")}; }
+        html body [data-oeb-cursor="wait"] { ${cursor("busy", "wait")}; }
+        html body [data-oeb-cursor="progress"] { ${cursor("working", "progress")}; }
+        html body [data-oeb-cursor="help"] { ${cursor("helpsel", "help")}; }
+        html body [data-oeb-cursor="ns-resize"] { ${cursor("ns", "ns-resize")}; }
+        html body [data-oeb-cursor="ew-resize"] { ${cursor("ew", "ew-resize")}; }
+        html body [data-oeb-cursor="nesw-resize"] { ${cursor("nesw", "nesw-resize")}; }
+        html body [data-oeb-cursor="nwse-resize"] { ${cursor("nwse", "nwse-resize")}; }
+      `;
+      document.documentElement.append(cursorStyle);
+    }
+    if (!cursorProbeActive) {
+      document.addEventListener("pointerover", probeOriginalCursor, true);
+      cursorProbeActive = true;
+    }
+  } else {
+    cursorStyle?.remove();
+    document.removeEventListener("pointerover", probeOriginalCursor, true);
+    cursorProbeActive = false;
+    hoveredCursorElement?.removeAttribute("data-oeb-cursor");
+    hoveredCursorElement = undefined;
+  }
+}
+
+function probeOriginalCursor(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const clickable = target.closest('a[href], area[href], button, select, summary, [role="button"], [role="link"], [role="option"], [onclick], [data-action], [tabindex="0"]');
+  const editable = target.closest('textarea, input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="url"], input[type="tel"], input[type="number"], [contenteditable]:not([contenteditable="false"]), [role="textbox"]');
+  const style = document.getElementById("oeb-default-cursor-style")?.sheet;
+  if (!style) return;
+  style.disabled = true;
+  let original;
+  try { original = getComputedStyle(target).cursor; }
+  catch { return; }
+  finally { style.disabled = false; }
+  hoveredCursorElement?.removeAttribute("data-oeb-cursor");
+  hoveredCursorElement = target;
+  const role = clickable && !editable ? "pointer" : ({ pointer: "pointer", text: "text", crosshair: "crosshair", move: "move",
+    grab: "move", grabbing: "move", "not-allowed": "not-allowed", wait: "wait", progress: "progress",
+    help: "help", "ns-resize": "ns-resize", "row-resize": "ns-resize",
+    "ew-resize": "ew-resize", "col-resize": "ew-resize", "nesw-resize": "nesw-resize",
+    "nwse-resize": "nwse-resize" })[original];
+  if (role) target.setAttribute("data-oeb-cursor", role);
 }
 
 function showSebBar(taskbar = {}, configuredScale = 100) {
@@ -216,7 +389,8 @@ function showSebBar(taskbar = {}, configuredScale = 100) {
     audio: taskbar.showAudio ? "1" : "0",
     reload: taskbar.showReload ? "1" : "0",
     reloadWarning: taskbar.reloadWarning === false ? "0" : "1",
-    quit: taskbar.showQuit === false ? "0" : "1"
+    quit: taskbar.showQuit === false ? "0" : "1",
+    cursor: presentationSettings.defaultWindowsCursor ? "1" : "0"
   });
   const desired = browser.runtime.getURL(`seb/assets/taskbar.html?${query}`);
   if (frame.src !== desired) frame.src = desired;
@@ -224,6 +398,7 @@ function showSebBar(taskbar = {}, configuredScale = 100) {
 }
 
 function removePresentation() {
+  setDefaultCursor(false);
   cancelStartup?.();
   cancelStartup = undefined;
   document.getElementById(STARTUP_FRAME_ID)?.remove();
@@ -241,7 +416,10 @@ async function openQuitDialog() {
   frame.title = "Quit Safe Exam Browser";
   const query = new URLSearchParams({
     password: response.passwordRequired ? "1" : "0",
-    disabled: "0"
+    disabled: "0",
+    cursor: presentationSettings.defaultWindowsCursor ? "1" : "0",
+    hideCursorOnQuit: ["custom-page", "screenshot"].includes(presentationSettings.afterQuit)
+      && !presentationSettings.showCursorOnBlack ? "1" : "0"
   });
   frame.src = browser.runtime.getURL(`seb/assets/quit.html?${query}`);
   document.documentElement.append(frame);
@@ -271,11 +449,16 @@ async function handlePresentationMessage(event) {
     return;
   }
   if (event.data?.type === "SEB_QUIT_SUBMIT") {
-    const response = await browser.runtime.sendMessage({
-      type: "SEB_QUIT",
-      confirmed: true,
-      password: event.data.password || ""
-    });
+    let response;
+    try {
+      response = await browser.runtime.sendMessage({
+        type: "SEB_QUIT",
+        confirmed: true,
+        password: event.data.password || ""
+      });
+    } catch (error) {
+      response = { ok: false, error: error.message };
+    }
     if (!response?.ok) {
       quitFrame.contentWindow?.postMessage({ type: "SEB_QUIT_ERROR", error: response?.error || "Could not quit." }, "*");
     }
@@ -313,4 +496,10 @@ function whenDocumentLoaded() {
 if (IS_TOP_FRAME) {
   window.addEventListener("message", handlePresentationMessage);
   initializePresentation();
+} else {
+  browser.runtime.sendMessage({ type: "SEB_GET_PAGE_PRESENTATION" }).then(response => {
+    if (response?.presentation?.loaded) setDefaultCursor(response.presentation.settings.defaultWindowsCursor);
+    else if (response?.presentation?.afterQuitCursor) setDefaultCursor(true);
+  }).catch(() => {});
 }
+resumePendingCapture();

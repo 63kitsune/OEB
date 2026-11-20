@@ -1,4 +1,4 @@
-import { calculateSebConfigHash } from "./config-key.js";
+import { calculateSebConfigHash, getSebStartUrl } from "./config-key.js";
 import { importSelectedFile } from "./file-import.js";
 
 import { bekSettingsForVersion } from "./bek-selection.js";
@@ -16,6 +16,8 @@ const elements = {
   filename: document.querySelector("#filename"),
   mode: document.querySelector("#mode"),
   sourceUrl: document.querySelector("#sourceUrl"),
+  startUrlRow: document.querySelector("#startUrlRow"),
+  startUrl: document.querySelector("#startUrl"),
   passwordForm: document.querySelector("#passwordForm"),
   password: document.querySelector("#password"),
   headerDemoSection: document.querySelector("#headerDemoSection"),
@@ -25,7 +27,15 @@ const elements = {
   xmlSection: document.querySelector("#xmlSection"),
   xml: document.querySelector("#xml"),
   fileInput: document.querySelector("#fileInput"),
-  closeTabOnQuit: document.querySelector("#closeTabOnQuit"),
+  afterQuit: document.querySelector("#afterQuit"),
+  customQuitUrl: document.querySelector("#customQuitUrl"),
+  openScreenshotPicker: document.querySelector("#openScreenshotPicker"),
+  quitScreenshotName: document.querySelector("#quitScreenshotName"),
+  blackoutSeconds: document.querySelector("#blackoutSeconds"),
+  fullscreenOnReload: document.querySelector("#fullscreenOnReload"),
+  showCursorOnBlack: document.querySelector("#showCursorOnBlack"),
+  windowsCursorAfterQuit: document.querySelector("#windowsCursorAfterQuit"),
+  defaultWindowsCursor: document.querySelector("#defaultWindowsCursor"),
   quitSettingStatus: document.querySelector("#quitSettingStatus"),
   checkDownloadsForSeb: document.querySelector("#checkDownloadsForSeb"),
   downloadCheckStatus: document.querySelector("#downloadCheckStatus"),
@@ -210,7 +220,16 @@ elements.unloadButton.addEventListener("click", async () => {
   await refresh();
 });
 
-elements.closeTabOnQuit.addEventListener("change", saveDisplaySettings);
+elements.afterQuit.addEventListener("change", () => { renderQuitOptions(); saveDisplaySettings(); });
+elements.customQuitUrl.addEventListener("change", saveDisplaySettings);
+elements.blackoutSeconds.addEventListener("change", saveDisplaySettings);
+elements.openScreenshotPicker.addEventListener("click", async () => {
+  await browser.tabs.create({ url: browser.runtime.getURL("seb/assets/screenshot-picker.html") });
+  window.close();
+});
+for (const setting of [elements.fullscreenOnReload, elements.showCursorOnBlack,
+  elements.defaultWindowsCursor, elements.windowsCursorAfterQuit])
+  setting.addEventListener("change", saveDisplaySettings);
 elements.checkDownloadsForSeb.addEventListener("change", saveDisplaySettings);
 elements.showStartupAnimation.addEventListener("change", saveDisplaySettings);
 elements.taskbarMode.addEventListener("change", saveDisplaySettings);
@@ -242,7 +261,16 @@ async function refreshSettings() {
   const response = await browser.runtime.sendMessage({ type: "SEB_GET_SETTINGS" });
   if (!response?.ok) throw new Error(response?.error || "Could not read your settings.");
   const settings = response.settings;
-  elements.closeTabOnQuit.checked = settings.closeTabOnQuit !== false;
+  elements.afterQuit.value = settings.afterQuit;
+  if (document.activeElement !== elements.customQuitUrl) elements.customQuitUrl.value = settings.customQuitUrl;
+  if (document.activeElement !== elements.blackoutSeconds) elements.blackoutSeconds.value = settings.blackoutSeconds;
+  elements.fullscreenOnReload.checked = settings.fullscreenOnReload;
+  elements.showCursorOnBlack.checked = settings.showCursorOnBlack;
+  elements.windowsCursorAfterQuit.checked = settings.windowsCursorAfterQuit;
+  elements.defaultWindowsCursor.checked = settings.defaultWindowsCursor;
+  renderQuitOptions();
+  const screenshot = await browser.storage.local.get("oebQuitScreenshot");
+  elements.quitScreenshotName.textContent = screenshot.oebQuitScreenshot?.name || "No screenshot selected";
   elements.checkDownloadsForSeb.checked = settings.checkDownloadsForSeb !== false;
   elements.showStartupAnimation.checked = settings.showStartupAnimation !== false;
   elements.taskbarMode.value = ["auto", "show", "hide"].includes(settings.taskbarMode) ? settings.taskbarMode : "auto";
@@ -256,13 +284,19 @@ async function saveDisplaySettings() {
   if (!Number.isFinite(scale) || scale < 50 || scale > 300) return;
   const settings = {
     checkDownloadsForSeb: elements.checkDownloadsForSeb.checked,
-    closeTabOnQuit: elements.closeTabOnQuit.checked,
+    afterQuit: elements.afterQuit.value,
+    customQuitUrl: elements.customQuitUrl.value.trim(),
+    blackoutSeconds: elements.blackoutSeconds.value,
+    fullscreenOnReload: elements.fullscreenOnReload.checked,
+    showCursorOnBlack: elements.showCursorOnBlack.checked,
+    windowsCursorAfterQuit: elements.windowsCursorAfterQuit.checked,
+    defaultWindowsCursor: elements.defaultWindowsCursor.checked,
     showStartupAnimation: elements.showStartupAnimation.checked,
     taskbarMode: elements.taskbarMode.value,
     taskbarScale: scale
   };
   const statusElement = document.activeElement === elements.checkDownloadsForSeb
-    ? elements.downloadCheckStatus : document.activeElement === elements.closeTabOnQuit
+    ? elements.downloadCheckStatus : [elements.afterQuit, elements.customQuitUrl, elements.blackoutSeconds].includes(document.activeElement)
       ? elements.quitSettingStatus : elements.taskbarScaleStatus;
   statusElement.textContent = "Saving…";
   displaySaveQueue = displaySaveQueue.catch(() => {}).then(async () => {
@@ -284,6 +318,13 @@ async function saveDisplaySettings() {
   }
 }
 
+function renderQuitOptions() {
+  const mode = elements.afterQuit.value;
+  document.querySelector("#customQuitUrlRow").hidden = mode !== "custom-page";
+  document.querySelector("#quitScreenshotRow").hidden = mode !== "screenshot";
+  document.querySelector("#blackoutRow").hidden = !["custom-page", "screenshot"].includes(mode);
+}
+
 function validTaskbarScale(value) {
   const scale = Number(value);
   return Number.isFinite(scale) && scale >= 50 && scale <= 300;
@@ -302,6 +343,20 @@ function render(state = {}) {
   elements.mode.textContent = formatMode(state.mode);
   elements.sourceUrl.textContent = state.sourceUrl || "Local file";
   elements.sourceUrl.title = state.sourceUrl || "";
+
+  let startUrl = "";
+  if (status === "ready" && state.xml) {
+    try { startUrl = getSebStartUrl(state.xml) || ""; }
+    catch { /* An unreadable configuration has no start URL to display. */ }
+  }
+  elements.startUrlRow.hidden = !startUrl;
+  elements.startUrl.textContent = startUrl;
+  elements.startUrl.title = startUrl;
+  elements.startUrl.removeAttribute("href");
+  try {
+    const url = new URL(startUrl);
+    if (["http:", "https:"].includes(url.protocol)) elements.startUrl.href = url.href;
+  } catch { /* Keep unsupported or invalid URLs as text. */ }
 
   elements.passwordForm.hidden = status !== "password-needed";
   elements.unloadButton.hidden = !["ready", "password-needed"].includes(status);

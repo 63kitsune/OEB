@@ -41,6 +41,10 @@
         </section>
         <section id="summary" class="card">
           <p id="message" role="status" aria-live="polite">Ready when you are.</p>
+          <p id="startUrlRow" class="startUrl" hidden>
+            <strong>Start URL</strong>
+            <a id="startUrl" target="_blank" rel="noopener noreferrer"></a>
+          </p>
           <details id="metadata" hidden>
             <summary>File details</summary>
             <dl>
@@ -58,7 +62,7 @@
           </div>
           <p class="hint">Used only to open this file. Your password is not saved.</p>
         </form>
-        <section class="card quickSettings" aria-label="Exam settings">
+        <details class="settingsDetails" open><summary>Exam setup</summary><section class="card quickSettings" aria-label="Exam settings">
           <label class="settingRow" for="checkDownloadsForSeb">
             <span><strong>Find exam files automatically</strong><small>Check downloads for SEB files, even without a .seb name.</small></span>
             <input id="checkDownloadsForSeb" type="checkbox" checked aria-describedby="downloadCheckStatus">
@@ -77,17 +81,12 @@
               <small id="bekUpdateStatus" class="hint" role="status" aria-live="polite"></small>
             </div>
           </form>
-        </section>
-        <section class="quitSetting">
-          <label class="settingRow" for="closeTabOnQuit">
-            <span><strong>Close exam tab on quit</strong><small>Turn off to keep the page open after quitting.</small></span>
-            <input id="closeTabOnQuit" type="checkbox" checked>
-          </label>
-          <p id="quitSettingStatus" class="hint" role="status" aria-live="polite"></p>
-        </section>
-        <details class="settingsDetails">
-          <summary>Appearance</summary>
+        </section></details>
+        <details class="settingsDetails" open>
+          <summary>While the exam is open</summary>
           <section class="settingsCard" aria-label="Appearance settings">
+            <label class="settingRow" for="fullscreenOnReload"><span><strong>Fullscreen after page reload</strong><small>Enter fullscreen when the exam page finishes reloading.</small></span><input id="fullscreenOnReload" type="checkbox"></label>
+            <label class="settingRow" for="defaultWindowsCursor"><span><strong>Standard Windows cursor</strong><small>Use the bundled Windows arrow, including on Linux.</small></span><input id="defaultWindowsCursor" type="checkbox"></label>
             <label class="settingRow" for="showStartupAnimation">
               <span><strong>Show opening animation</strong></span>
               <input id="showStartupAnimation" type="checkbox">
@@ -110,6 +109,24 @@
             <p id="taskbarScaleStatus" class="hint" role="status" aria-live="polite"></p>
           </section>
         </details>
+        <details class="settingsDetails" open><summary>After quitting</summary><section class="quitSetting" aria-label="After quitting">
+          <label class="settingRow" for="afterQuit"><span><strong>After quitting</strong><small>Choose what appears when you leave the exam.</small></span>
+            <select id="afterQuit"><option value="close-window">Close exam window</option><option value="unload">Just unload exam</option><option value="custom-page">Show custom page</option><option value="screenshot">Show screenshot</option></select>
+          </label>
+          <label id="customQuitUrlRow" class="quitExtra" for="customQuitUrl" hidden>Page URL
+            <input id="customQuitUrl" type="url" placeholder="https://example.com/finished">
+          </label>
+          <div id="quitScreenshotRow" class="quitExtra" hidden><strong>Screenshot</strong>
+            <button id="openScreenshotPicker" type="button" class="secondary">Choose screenshot in a new tab</button>
+            <small id="quitScreenshotName"></small>
+          </div>
+          <label id="blackoutRow" class="quitExtra" for="blackoutSeconds" hidden>Black screen before showing it (seconds)
+            <input id="blackoutSeconds" type="number" min="0" max="3600" step="1" value="0">
+          </label>
+          <p id="quitSettingStatus" class="hint" role="status" aria-live="polite"></p>
+          <label class="settingRow" for="showCursorOnBlack"><span><strong>Show cursor on black screen</strong><small>On by default.</small></span><input id="showCursorOnBlack" type="checkbox" checked></label>
+          <label class="settingRow" for="windowsCursorAfterQuit"><span><strong>Windows cursor after quitting</strong><small>Use the Windows cursor on the screenshot or custom page.</small></span><input id="windowsCursorAfterQuit" type="checkbox"></label>
+        </section></details>
         <details id="headerDemoSection" class="settingsDetails" hidden>
           <summary>Connection details</summary>
           <div class="sectionTitle"><h2>Exam connection</h2><span id="headerDemoPill" class="pill idle">Off</span></div>

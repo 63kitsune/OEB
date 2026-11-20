@@ -50,7 +50,19 @@ export async function inspectSebFile(input, password) {
       return readyResult(await unwrapPlainPayload(payload), prefix);
     case "pswd":
     case "pwcc": {
-      if (password === undefined) {
+      const automatic = password === undefined;
+      const candidate = password ?? "";
+      // An empty configuring-client password is used directly, without hashing.
+      const effectivePassword = prefix === "pwcc" && candidate !== ""
+        ? await sha256Hex(candidate, true)
+        : candidate;
+      let decrypted;
+      try {
+        decrypted = await decryptRNCryptor(payload, effectivePassword);
+      } catch (error) {
+        // Ask only when the automatic empty-password attempt fails authentication.
+        // Malformed encryption and decoded-payload errors keep their real errors.
+        if (!automatic || !(error instanceof SebParseError) || error.code !== "INVALID_PASSWORD") throw error;
         return {
           status: "password-needed",
           mode: prefix,
@@ -60,10 +72,6 @@ export async function inspectSebFile(input, password) {
         };
       }
 
-      const effectivePassword = prefix === "pwcc"
-        ? await sha256Hex(password, true)
-        : password;
-      const decrypted = await decryptRNCryptor(payload, effectivePassword);
       return readyResult(await unwrapPlainPayload(decrypted), prefix);
     }
     case "pkhs":

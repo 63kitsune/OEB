@@ -1,5 +1,11 @@
 const parameters = new URLSearchParams(location.search);
 const enabled = name => parameters.get(name) === "1";
+if (enabled("cursor")) {
+  const style = document.createElement("style");
+  style.textContent = `html, body, .taskbar, .taskbar * { cursor: url("../icons/aero_arrow.png") 0 0, default !important; }
+    button.control, button.control * { cursor: url("../icons/aero_link.png") 6 0, pointer !important; }`;
+  document.head.append(style);
+}
 const height = Math.max(20, Math.min(240, Number(parameters.get("height")) || 40));
 document.documentElement.style.setProperty("--taskbar-height", `${height}px`);
 document.documentElement.style.setProperty("--taskbar-scale", String(height / 40));

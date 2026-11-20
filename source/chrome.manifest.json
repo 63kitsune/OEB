@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "OEB — Open Exam Browser",
+  "name": "OEB \u2014 Open Exam Browser",
   "description": "Opens SEB configurations and provides optional multi-provider AI autofill for Moodle questions.",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "icons": {
     "16": "assets/icons/icon-16.png",
     "48": "assets/icons/icon-48.png",
@@ -11,6 +11,7 @@
   "permissions": [
     "downloads",
     "storage",
+    "unlimitedStorage",
     "tabs",
     "webRequest",
     "webRequestBlocking",
@@ -25,7 +26,7 @@
       "16": "assets/icons/icon-16.png",
       "32": "assets/icons/icon-32.png"
     },
-    "default_title": "OEB — Open Exam Browser",
+    "default_title": "OEB \u2014 Open Exam Browser",
     "default_popup": "popup.html"
   },
   "commands": {
@@ -67,9 +68,41 @@
     "seb/assets/quit.js",
     "seb/icons/SebSplashScreen.png",
     "seb/icons/seb_logo.png",
+    "seb/icons/aero_arrow.cur",
     "seb/icons/shutdown.svg",
     "seb/icons/wifi.svg",
-    "seb/download-page.js"
+    "seb/download-page.js",
+    "seb/icons/aero_beam.cur",
+    "seb/icons/aero_busy.ani",
+    "seb/icons/aero_busy.cur",
+    "seb/icons/aero_cross.cur",
+    "seb/icons/aero_ew.cur",
+    "seb/icons/aero_helpsel.cur",
+    "seb/icons/aero_link.cur",
+    "seb/icons/aero_move.cur",
+    "seb/icons/aero_nesw.cur",
+    "seb/icons/aero_ns.cur",
+    "seb/icons/aero_nwse.cur",
+    "seb/icons/aero_pen.cur",
+    "seb/icons/aero_unavail.cur",
+    "seb/icons/aero_up.cur",
+    "seb/icons/aero_working.ani",
+    "seb/icons/aero_working.cur",
+    "seb/icons/aero_arrow.png",
+    "seb/icons/aero_beam.png",
+    "seb/icons/aero_busy.png",
+    "seb/icons/aero_cross.png",
+    "seb/icons/aero_ew.png",
+    "seb/icons/aero_helpsel.png",
+    "seb/icons/aero_link.png",
+    "seb/icons/aero_move.png",
+    "seb/icons/aero_nesw.png",
+    "seb/icons/aero_ns.png",
+    "seb/icons/aero_nwse.png",
+    "seb/icons/aero_pen.png",
+    "seb/icons/aero_unavail.png",
+    "seb/icons/aero_up.png",
+    "seb/icons/aero_working.png"
   ],
   "minimum_chrome_version": "111"
 }

@@ -48,12 +48,14 @@ const responseCaptures = new Map();
 const sebResponseRequests = new Set();
 const pageTransitions = new Map();
 const presentationTabs = new Set();
+const afterQuitCursorTabs = new Set();
 
 installAssistantCommands();
 
 browser.tabs.onRemoved.addListener((tabId) => {
   pageTransitions.delete(tabId);
   presentationTabs.delete(tabId);
+  afterQuitCursorTabs.delete(tabId);
 });
 
 browser.runtime.onInstalled.addListener(async () => {
@@ -294,15 +296,29 @@ async function handleMessage(request, sender) {
             && presentationTabs.has(sender.tab?.id)
             && isWebUrl(sender.tab?.url),
           afterReload: transition?.phase === "reloading",
+          afterQuitCursor: afterQuitCursorTabs.has(sender.tab?.id),
           settings: buildPresentationSettings(await loadSettings(), state.xml)
         }
       };
     }
+    case "SEB_ENABLE_AFTER_QUIT_CURSOR":
+      if (sender.url?.startsWith(browser.runtime.getURL("seb/assets/after-quit.html"))
+          && Number.isInteger(sender.tab?.id)) afterQuitCursorTabs.add(sender.tab.id);
+      return { ok: true };
     case "SEB_STARTUP_FINISHED":
       await beginPendingReload(sender.tab?.id);
       return { ok: true };
+    case "SEB_PAGE_READY":
+      if (presentationTabs.has(sender.tab?.id) && (await loadSettings()).fullscreenOnReload
+          && Number.isInteger(sender.tab?.windowId)) {
+        await browser.windows.update(sender.tab.windowId, { state: "fullscreen" }).catch(() => {});
+      }
+      return { ok: true };
     case "SEB_TRANSITION_FINISHED":
       if (Number.isInteger(sender.tab?.id)) pageTransitions.delete(sender.tab.id);
+      if ((await loadSettings()).fullscreenOnReload && Number.isInteger(sender.tab?.windowId)) {
+        await browser.windows.update(sender.tab.windowId, { state: "fullscreen" }).catch(() => {});
+      }
       return { ok: true };
     case "SEB_GET_QUIT_REQUIREMENTS": {
       const state = await loadState();
@@ -323,7 +339,59 @@ async function handleMessage(request, sender) {
       if (!await verifySebQuitPassword(state.xml, request.password || "")) {
         return { ok: false, error: "Incorrect quit password." };
       }
-      await unloadConfiguration({ closeTabs: (await loadSettings()).closeTabOnQuit });
+      const settings = await loadSettings();
+      const examWindowId = sender.tab?.windowId;
+      if (settings.afterQuit === "custom-page" && settings.customQuitUrl.trim()) {
+        try {
+          const url = new URL(settings.customQuitUrl);
+          if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+        } catch { return { ok: false, error: "Enter a valid http or https page URL in After quitting settings." }; }
+      }
+      if (settings.afterQuit === "screenshot") {
+        const saved = await browser.storage.local.get("oebQuitScreenshot");
+        if (!saved.oebQuitScreenshot?.dataUrl) return { ok: false, error: "Choose a screenshot in After quitting settings." };
+      }
+      const existingWindow = Number.isInteger(examWindowId)
+        ? await browser.windows.get(examWindowId).catch(() => null) : null;
+      const hasDisplay = ["custom-page", "screenshot"].includes(settings.afterQuit);
+      let blackoutStartedAt;
+      if (hasDisplay && Number.isInteger(sender.tab?.id)) {
+        const blackout = await browser.tabs.sendMessage(sender.tab.id, {
+          type: "SEB_BEGIN_QUIT_BLACKOUT", showCursor: settings.showCursorOnBlack
+        }).catch(() => null);
+        if (blackout?.ok) blackoutStartedAt = Date.now();
+      }
+      try {
+        await unloadConfiguration();
+        if (Number.isInteger(sender.tab?.id)) afterQuitCursorTabs.delete(sender.tab.id);
+        if (settings.afterQuit === "close-window" && Number.isInteger(examWindowId)) {
+          await browser.windows.remove(examWindowId);
+        } else if (hasDisplay) {
+          if (blackoutStartedAt !== undefined) {
+            const remaining = settings.blackoutSeconds * 1000 - (Date.now() - blackoutStartedAt);
+            if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+          }
+          const displayUrl = browser.runtime.getURL(`seb/assets/after-quit.html${blackoutStartedAt === undefined ? "" : "?blackout=done"}`);
+          if (existingWindow?.state === "fullscreen" && Number.isInteger(sender.tab?.id)) {
+            if (settings.afterQuit === "custom-page" && settings.windowsCursorAfterQuit) {
+              afterQuitCursorTabs.add(sender.tab.id);
+            }
+            await browser.tabs.update(sender.tab.id, { url: displayUrl });
+          } else {
+            const display = await browser.windows.create({ url: displayUrl, state: "fullscreen" });
+            const displayTabId = display.tabs?.[0]?.id
+              ?? (await browser.tabs.query({ windowId: display.id }))[0]?.id;
+            if (settings.afterQuit === "custom-page" && settings.windowsCursorAfterQuit
+                && Number.isInteger(displayTabId)) afterQuitCursorTabs.add(displayTabId);
+            if (Number.isInteger(examWindowId) && examWindowId !== display.id) await browser.windows.remove(examWindowId);
+          }
+        }
+      } catch (error) {
+        if (hasDisplay && Number.isInteger(sender.tab?.id)) {
+          await browser.tabs.sendMessage(sender.tab.id, { type: "SEB_END_QUIT_BLACKOUT" }).catch(() => {});
+        }
+        throw error;
+      }
       return { ok: true };
     }
     case "SEB_HEADER_ENABLE": {
@@ -569,6 +637,7 @@ async function activateLaunch(xml, metadata) {
   const settings = buildPresentationSettings(await loadSettings(), xml);
   const targetTab = await findTargetTab(metadata.tabId);
   if (!targetTab) throw new Error("Open an HTTP or HTTPS page before loading the SEB configuration.");
+  afterQuitCursorTabs.delete(targetTab.id);
   await enableHeaderInjection(configHash, { xml, origin: destination, settings: await loadBekSettings() });
   await broadcastMessage({ type: "SEB_UNLOAD_PRESENTATION" });
   presentationTabs.clear();

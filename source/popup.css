@@ -31,6 +31,10 @@ body {
   scrollbar-gutter: stable;
 }
 
+.quitExtra { display: grid; gap: 6px; margin: 12px 0; }
+.quitExtra[hidden] { display: none; }
+.quitExtra input { max-width: 100%; }
+
 main {
   padding: 0 24px 24px;
 }
@@ -206,6 +210,15 @@ dl div {
 dt {
   color: #687276;
   font-size: 11px;
+}
+
+.startUrl {
+  display: grid;
+  gap: 4px;
+}
+
+.startUrl a {
+  overflow-wrap: anywhere;
 }
 
 dd {

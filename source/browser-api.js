@@ -61,7 +61,9 @@
     },
     windows: chrome.windows && {
       onRemoved: chrome.windows.onRemoved,
+      get(windowId) { return invoke(chrome.windows, "get", windowId); },
       create(createData) { return invoke(chrome.windows, "create", createData); },
+      remove(windowId) { return invoke(chrome.windows, "remove", windowId); },
       update(windowId, updateInfo) { return invoke(chrome.windows, "update", windowId, updateInfo); }
     },
     storage: storage && {
